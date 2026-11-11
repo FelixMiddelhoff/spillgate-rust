@@ -29,6 +29,7 @@ spillgate-test-support = { path = "crates/test-support" }
 flate2 = "1"
 sha2 = "0.10"
 serde_json = "1"
+zstd = "0.13"
 
 [lints.rust]
 unsafe_code = "forbid"
@@ -39,3 +40,7 @@ unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"
 indexing_slicing = "warn"
+
+# The reference encoder is C code; build it optimized even in debug test runs.
+[profile.dev.package.zstd-sys]
+opt-level = 3
