@@ -175,7 +175,7 @@ impl Read for Recording {
 impl BufRead for Recording {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         self.stats.fills.set(self.stats.fills.get() + 1);
-        let end = (self.pos + self.chunk).min(self.data.len());
+        let end = self.pos.saturating_add(self.chunk).min(self.data.len());
         self.shown = end - self.pos;
         Ok(&self.data[self.pos..end])
     }
