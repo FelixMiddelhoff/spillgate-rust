@@ -179,16 +179,9 @@ fn cancellation_from_another_thread() {
         std::thread::sleep(std::time::Duration::from_millis(20));
         remote.cancel();
     });
-    // A manual loop: io::copy and read_to_end retry on io::ErrorKind::Interrupted, which is what a
-    // canceled reader reports, and would spin forever on the sticky error (see the how-to, 3.7).
-    let mut buf = [0u8; 4096];
-    let error = loop {
-        match reader.read(&mut buf) {
-            Ok(0) => panic!("endless source ended"),
-            Ok(_) => {}
-            Err(e) => break e,
-        }
-    };
+    // read_to_end retries on io::ErrorKind::Interrupted: a canceled reader must not report that,
+    // or the sticky error would make the standard helpers spin forever.
+    let error = reader.read_to_end(&mut Vec::new()).unwrap_err();
     handle.join().unwrap();
     assert_eq!(Error::from_io(&error).map(Error::kind), Some(ErrorKind::Canceled));
     // sticky

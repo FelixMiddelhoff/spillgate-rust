@@ -379,7 +379,7 @@ message attribute. For content stored with a known encoding pass it yourself (`&
 - `decode_all` / `Decoder::decode_all`: simplest. You get the complete body or an error and **no
   data**. Peak memory is the decoded size, at most `max_output`, plus a copy while the buffer
   grows.
-- `Decoder::reader`: streaming, a normal `Read` (`read`, `read_to_end`, `io::copy`, `BufReader`; a canceled reader is the exception, see 3.7).
+- `Decoder::reader`: streaming, a normal `Read` (`read`, `read_to_end`, `io::copy`, `BufReader`).
   **Bytes can be delivered before a later error.** Whatever you did with them (wrote to a file,
   fed a parser, stored in a database) must be undone when an error comes. Write to a temporary
   file and move it on success; never commit a partial body.
@@ -442,11 +442,7 @@ assert_eq!(Error::from_io(&error).map(Error::kind), Some(ErrorKind::Canceled));
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-**Read a canceled reader with your own loop, not with `read_to_end`, `read_exact`, `io::copy` or
-`BufReader`.** A canceled reader reports `io::ErrorKind::Interrupted`, and the standard library
-helpers retry on `Interrupted`; because the error is sticky they would spin forever. (In 0.1 this
-is a known sharp edge; `Error::from_io` on the `io::Error` of a plain `read` call is the reliable
-way to see the cancellation.)
+A canceled reader fails with `ErrorKind::Canceled` (an `io::ErrorKind::Other` wrapping the typed error), sticky, so `read_to_end`, `io::copy` and `BufReader` stop at once.
 
 `spawn_blocking` tasks cannot be aborted once running; the token is how you stop one.
 

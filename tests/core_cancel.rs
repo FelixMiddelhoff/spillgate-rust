@@ -86,3 +86,17 @@ fn a_reader_without_a_token_is_unaffected() {
     let mut reader = zero_decoder().reader(&b"x"[..], &["zeros"]).unwrap();
     assert!(reader.read(&mut [0u8; 16]).unwrap() > 0);
 }
+
+#[test]
+fn sg_r_api_04_a_canceled_reader_does_not_trap_std_helpers() {
+    // Covers: SG-R-API-04 (std helpers such as read_to_end retry io::ErrorKind::Interrupted; the
+    // sticky Canceled error must not use that kind, or they would spin forever)
+    let token = CancelToken::new();
+    token.cancel();
+    let mut reader = zero_decoder()
+        .reader_with_cancel(&b"x"[..], &["zeros"], &token)
+        .unwrap();
+    let error = reader.read_to_end(&mut Vec::new()).unwrap_err();
+    assert_ne!(error.kind(), std::io::ErrorKind::Interrupted);
+    assert_eq!(kind_of(&error), ErrorKind::Canceled);
+}

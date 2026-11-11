@@ -148,8 +148,7 @@ impl<R: Read> InputMeter<R> {
                     self.fetched = self.fetched.saturating_add(n as u64);
                     return Ok(());
                 }
-                // A canceled lower layer is also reported as Interrupted; only a foreign
-                // Interrupted is retried.
+                // Only a foreign Interrupted is retried, never a typed spillgate error.
                 Err(e) if e.kind() == io::ErrorKind::Interrupted && Error::from_io(&e).is_none() => {
                     interrupted += 1;
                     if interrupted >= MAX_EMPTY_READS {

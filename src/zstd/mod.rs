@@ -77,7 +77,7 @@ pub fn codec(options: ZstdOptions) -> Result<ZstdCodec, Error> {
     let cap = options.max_window_bytes;
     if !(MIN_WINDOW..=MAX_WINDOW).contains(&cap) {
         return Err(Error::new(
-            ErrorKind::InvalidLimits,
+            ErrorKind::InvalidOption,
             format!("zstd: max_window_bytes must be in {MIN_WINDOW}..={MAX_WINDOW}"),
         ));
     }

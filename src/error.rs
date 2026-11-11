@@ -196,7 +196,6 @@ impl From<Error> for io::Error {
     fn from(error: Error) -> io::Error {
         let kind = match error.kind {
             ErrorKind::Corrupt | ErrorKind::MalformedEncoding => io::ErrorKind::InvalidData,
-            ErrorKind::Canceled => io::ErrorKind::Interrupted,
             _ => io::ErrorKind::Other,
         };
         io::Error::new(kind, error)

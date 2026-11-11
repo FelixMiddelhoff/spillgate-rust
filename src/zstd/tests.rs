@@ -1282,7 +1282,7 @@ fn cap_settings_are_validated() {
     // Covers: SG-R-CDC-09
     for bad in [0u64, 1, 1023, (1 << 30) + 1, u64::MAX] {
         let err = codec(ZstdOptions { max_window_bytes: bad }).unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::InvalidLimits, "{bad}");
+        assert_eq!(err.kind(), ErrorKind::InvalidOption, "{bad}");
     }
     for good in [1024u64, 1025, DEFAULT_MAX_WINDOW, 1 << 30] {
         assert!(codec(ZstdOptions { max_window_bytes: good }).is_ok(), "{good}");
