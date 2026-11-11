@@ -22,7 +22,7 @@ zstd = []
 
 [dependencies]
 # Pure Rust brotli decoder. Pinned exactly: a decoder update is a security-relevant change.
-brotli-decompressor = { version = "=5.0.0", optional = true, default-features = false, features = ["std"] }
+brotli-decompressor = { version = "=6.3.0", optional = true, default-features = false, features = ["std"] }
 
 [dev-dependencies]
 spillgate-test-support = { path = "crates/test-support" }
