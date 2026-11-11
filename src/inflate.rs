@@ -17,6 +17,8 @@ use crate::error::{Error, ErrorKind};
 const WINDOW_SIZE: usize = 1 << 15;
 const WINDOW_MASK: usize = WINDOW_SIZE - 1;
 const MAX_BITS: u32 = 15;
+/// Length extra (5) + distance code (15) + distance extra (13).
+const FAST_MATCH_BITS: u32 = 33;
 /// Largest literal/length symbol count (HLIT + 257) and distance symbol count (HDIST + 1).
 const MAX_LIT_SYMBOLS: usize = 286;
 const MAX_DIST_SYMBOLS: usize = 30;
@@ -606,7 +608,25 @@ impl Inflater {
                             }
                             self.bitbuf >>= length;
                             self.bitcount -= length;
-                            self.symbol_code = (symbol - 257) as usize;
+                            let code = (symbol - 257) as usize;
+                            if self.bitcount < FAST_MATCH_BITS {
+                                self.refill(inp, ip);
+                            }
+                            if self.bitcount >= FAST_MATCH_BITS {
+                                // The whole match is buffered: no state changes in between.
+                                self.decode_match_rest(code)?;
+                                let room = out.len().saturating_sub(*op);
+                                let n = self.match_length.min(room);
+                                self.copy_match(out, *op, n);
+                                *op += n;
+                                self.match_length -= n;
+                                if self.match_length > 0 {
+                                    self.state = State::Copy;
+                                    return Ok(Status::OutputFull);
+                                }
+                                continue;
+                            }
+                            self.symbol_code = code;
                             self.state = State::LengthExtra;
                             break;
                         }
@@ -678,6 +698,36 @@ impl Inflater {
                 State::Failed => return Err(corrupt("the stream is already known to be invalid")),
             }
         }
+    }
+
+    /// With `FAST_MATCH_BITS` bits buffered: the length extra bits, the distance code and its extra
+    /// bits of a match whose length code is `code`. Sets `match_length` and `match_distance`.
+    #[inline(always)]
+    fn decode_match_rest(&mut self, code: usize) -> Result<(), Error> {
+        let extra_bits = u32::from(LENGTH_EXTRA_BITS.get(code).copied().unwrap_or(0));
+        let base = usize::from(LENGTH_BASE.get(code).copied().unwrap_or(3));
+        self.match_length = base + self.take(extra_bits) as usize;
+        let entry = if self.use_fixed {
+            self.fixed_distance_table.lookup(self.bitbuf)
+        } else {
+            self.distance_table.lookup(self.bitbuf)
+        };
+        let length = entry & 15;
+        let symbol = (entry >> 4) as usize;
+        if length == 0 {
+            return Err(corrupt("invalid distance code"));
+        }
+        if symbol > 29 {
+            return Err(corrupt("invalid distance symbol"));
+        }
+        self.take(length);
+        let extra_bits = u32::from(DISTANCE_EXTRA_BITS.get(symbol).copied().unwrap_or(0));
+        let base = usize::from(DISTANCE_BASE.get(symbol).copied().unwrap_or(1));
+        self.match_distance = base + self.take(extra_bits) as usize;
+        if self.match_distance > self.window_filled {
+            return Err(corrupt("distance too far back"));
+        }
+        Ok(())
     }
 
     fn finish_dynamic_tables(&mut self) -> Result<(), Error> {
