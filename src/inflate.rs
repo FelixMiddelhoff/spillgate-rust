@@ -177,6 +177,8 @@ pub(crate) struct Inflater {
     length_index: usize,
     repeat_symbol: u32,
     previous_length: u8,
+    /// An error to return on the next call, after the bytes written before it were delivered.
+    deferred: Option<Error>,
 
     code_length_table: Table,
     literal_table: Table,
@@ -231,6 +233,7 @@ impl Inflater {
             length_index: 0,
             repeat_symbol: 0,
             previous_length: 0,
+            deferred: None,
             code_length_table: Table::new(7),
             literal_table: Table::new(MAX_BITS),
             distance_table: Table::new(MAX_BITS),
@@ -252,12 +255,25 @@ impl Inflater {
         self.window_pos = 0;
         self.window_filled = 0;
         self.stored_left = 0;
+        self.deferred = None;
     }
 
     /// True once the final block has ended.
     #[cfg(test)]
     pub(crate) fn finished(&self) -> bool {
         self.state == State::Finished
+    }
+
+    /// An error found after `op` bytes were already written in this call: the bytes are delivered
+    /// first and the error follows on the next call, so what is delivered before an error does not
+    /// depend on the read size (SG-R-RDR-01).
+    fn fail_after(&mut self, op: usize, error: Error) -> Result<usize, Error> {
+        if op > 0 {
+            self.deferred = Some(error);
+            Ok(op)
+        } else {
+            Err(error)
+        }
     }
 
     /// Decode into `out`. Returns the number of bytes written (at least 1 unless the stream
@@ -271,7 +287,12 @@ impl Inflater {
         loop {
             match self.state {
                 State::Finished => return Ok(0),
-                State::Failed => return Err(corrupt("the stream is already known to be invalid")),
+                State::Failed => {
+                    return Err(self
+                        .deferred
+                        .take()
+                        .unwrap_or_else(|| corrupt("the stream is already known to be invalid")));
+                }
                 _ => {}
             }
             let buf = input.fill_buf().map_err(Error::from_input)?;
@@ -284,14 +305,14 @@ impl Inflater {
                 Err(e) => {
                     self.state = State::Failed;
                     input.consume(ip);
-                    return Err(e);
+                    return self.fail_after(op, e);
                 }
             };
             if status != Status::NeedInput {
                 if let Err(e) = self.give_back(&mut ip, status == Status::Done) {
                     self.state = State::Failed;
                     input.consume(ip);
-                    return Err(e);
+                    return self.fail_after(op, e);
                 }
             }
             input.consume(ip);
@@ -560,6 +581,8 @@ impl Inflater {
                         slots.fill(value);
                     }
                     self.length_index = end;
+                    // A later "repeat previous" (16) repeats the last length written: after 17 or 18, zero.
+                    self.previous_length = value;
                     self.state = State::DynSymbols;
                 }
                 State::Symbol => {
@@ -695,7 +718,12 @@ impl Inflater {
                     self.state = State::Symbol;
                 }
                 State::Finished => return Ok(Status::Done),
-                State::Failed => return Err(corrupt("the stream is already known to be invalid")),
+                State::Failed => {
+                    return Err(self
+                        .deferred
+                        .take()
+                        .unwrap_or_else(|| corrupt("the stream is already known to be invalid")));
+                }
             }
         }
     }

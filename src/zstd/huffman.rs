@@ -66,6 +66,12 @@ pub(crate) fn read_huffman_table(bytes: &[u8]) -> Result<(HuffmanTable, usize), 
         return Err(err("zstd: Huffman weights do not complete a tree"));
     }
     weights.push(remainder.trailing_zeros() as u8 + 1); // log2(rest) + 1
+                                                        // libzstd refuses a tree with fewer than two weight-1 symbols (the implied one included) or an
+                                                        // odd number of them; accepting it would be a parser differential.
+    let ones = weights.iter().filter(|&&w| w == 1).count();
+    if ones < 2 || ones % 2 == 1 {
+        return Err(err("zstd: Huffman weights do not form a valid tree"));
+    }
     if max_bits > MAX_HUFFMAN_BITS {
         return Err(err("zstd: a Huffman code is too long"));
     }
