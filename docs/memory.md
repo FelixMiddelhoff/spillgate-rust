@@ -8,7 +8,7 @@ the constants in `src/` (named in the table) and are checked by the tests named 
 | --- | --- | --- |
 | Input meter buffer, per layer | 4 KiB fetched at a time from the source (`BUFFER_SIZE`) | `src/meter.rs` |
 | One decode step, per layer | at most 64 KiB of output per codec call (`MAX_STEP`), whatever buffer size the caller reads with | `src/guard.rs` |
-| DEFLATE decoder state (gzip, deflate), per layer | about 160 KiB: 32 KiB window (`WINDOW_SIZE`), two 2^15-entry `u16` code tables (64 KiB each), a few small tables | `src/inflate.rs` |
+| DEFLATE decoder state (gzip, deflate), per layer | about 46 KiB: 32 KiB window (`WINDOW_SIZE`), five code tables with a 2^10 (literal/length), 2^8 (distance) or 2^7 (code length) entry root each plus about 1.5 KiB of canonical-code bookkeeping; building a table costs O(symbols + root size) whatever the code lengths, so an empty dynamic block with depth-15 codes is no CPU amplifier | `src/inflate.rs` |
 | gzip header fields | FNAME and FCOMMENT are refused above 512 bytes (`MAX_STRING`); the extra field is skipped, not buffered | `src/gzip.rs` |
 | `Content-Encoding` header | at most 1024 bytes, 16 elements, tokens of at most 32 bytes | `src/header.rs` |
 | Whole-body function (`decode_all`) | grows with the bytes actually produced; never preallocated from `max_output` or from a declared size | `src/decoder.rs` |

@@ -2,7 +2,7 @@
 //!
 //! The decoder works like zlib's `inflate()`: the caller passes an input window and an output
 //! buffer of any size, it stops when either is exhausted and remembers where it was. Memory is a
-//! 32 KiB window and three code tables (about 130 KiB), whatever the data (SG-R-MEM-01). Nothing is
+//! 32 KiB window and five small code tables (about 10 KiB), whatever the data (SG-R-MEM-01). Nothing is
 //! sized from a value in the stream (SG-R-CDC-07).
 //!
 //! Input accounting: bytes are pulled into a bit buffer, but at the end of every step the whole
@@ -64,33 +64,107 @@ enum Status {
     Done,
 }
 
-/// A decoding table: `entries[bits & mask]` is `symbol << 4 | length`, or 0 for an unassigned code.
+/// Returned by [`Table::decode`] when too few bits are buffered to resolve the code yet.
+const NEED_MORE: u32 = 1 << 31;
+/// Root table widths (bits resolved by one lookup) for literal/length, distance and code-length codes.
+const LIT_ROOT_BITS: u32 = 10;
+const DIST_ROOT_BITS: u32 = 8;
+const CL_ROOT_BITS: u32 = 7;
+/// Largest alphabet of any table (fixed literal/length: 288).
+const MAX_SYMBOLS: usize = 288;
+
+/// A decoding table. `root[bits & mask]` is `symbol << 4 | length` for every code of at most
+/// `root_bits` bits and 0 otherwise. Longer codes are resolved bit by bit from the canonical-code
+/// bookkeeping (count per length, symbols sorted by code), as in zlib's `puff.c`. Building costs
+/// O(symbols + 2^root_bits), whatever the longest code length (SG-R-CDC-07).
 struct Table {
-    entries: Vec<u16>,
+    root: Vec<u16>,
+    root_bits: u32,
     mask: usize,
-    /// The length of the longest code. An unassigned slot is invalid only once that many bits are real.
+    /// The length of the longest code. A root miss is invalid once that many bits are real.
     bits: u32,
+    counts: [u16; MAX_BITS as usize + 1],
+    sorted: [u16; MAX_SYMBOLS],
+    /// The code lengths this table was built from, and whether that build succeeded: an identical
+    /// set is not rebuilt.
+    built: [u8; MAX_SYMBOLS],
+    built_len: usize,
+    built_incomplete_ok: bool,
+    valid: bool,
 }
 
 impl Table {
-    fn new(max_bits: u32) -> Table {
+    fn new(root_bits: u32) -> Table {
         Table {
-            entries: vec![0; 1usize << max_bits],
-            mask: 0,
+            root: vec![0; 1usize << root_bits],
+            root_bits,
+            mask: (1usize << root_bits) - 1,
             bits: 0,
+            counts: [0; MAX_BITS as usize + 1],
+            sorted: [0; MAX_SYMBOLS],
+            built: [0; MAX_SYMBOLS],
+            built_len: 0,
+            built_incomplete_ok: false,
+            valid: false,
         }
     }
 
+    /// The entry for the code at the bottom of `bitbuf` (`bitcount` real bits): `symbol << 4 | length`
+    /// (the length may exceed `bitcount`: the caller checks), 0 for an invalid code, `NEED_MORE`
+    /// if more bits are needed to tell.
     #[inline(always)]
-    fn lookup(&self, bitbuf: u64) -> u32 {
-        // `mask` is below the size of `entries`; a miss would read as an invalid code.
-        u32::from(self.entries.get((bitbuf as usize) & self.mask).copied().unwrap_or(0))
+    fn decode(&self, bitbuf: u64, bitcount: u32) -> u32 {
+        // `mask` is below the size of `root`; a miss would read as an unassigned slot.
+        let entry = u32::from(self.root.get((bitbuf as usize) & self.mask).copied().unwrap_or(0));
+        if entry != 0 {
+            return entry;
+        }
+        self.decode_slow(bitbuf, bitcount)
+    }
+
+    /// A root miss: a code longer than the root (continue bit by bit) or an unassigned one.
+    #[cold]
+    #[inline(never)]
+    fn decode_slow(&self, bitbuf: u64, bitcount: u32) -> u32 {
+        if self.bits <= self.root_bits {
+            // Every code fits the root, so the slot is unassigned: invalid once all bits are real.
+            return if bitcount >= self.bits { 0 } else { NEED_MORE };
+        }
+        // Canonical decoding, first stream bit = most significant code bit.
+        let mut code = 0u32;
+        let mut first = 0u32;
+        let mut index = 0u32;
+        for length in 1..=self.bits {
+            if length > bitcount {
+                return NEED_MORE;
+            }
+            code |= ((bitbuf >> (length - 1)) & 1) as u32;
+            let count = u32::from(self.counts.get(length as usize).copied().unwrap_or(0));
+            if code < first + count {
+                let symbol = self.sorted.get((index + code - first) as usize).copied().unwrap_or(0);
+                return (u32::from(symbol) << 4) | length;
+            }
+            index += count;
+            first = (first + count) << 1;
+            code <<= 1;
+        }
+        0
     }
 
     /// Build a canonical Huffman decoding table from code lengths (RFC 1951 section 3.2.2).
     /// Returns false for an over-subscribed set, and for an incomplete one unless it is the single
     /// code of length 1 that zlib also accepts (`allow_incomplete`), or there are no codes at all.
     fn build(&mut self, lengths: &[u8], allow_incomplete: bool) -> bool {
+        if self.valid
+            && self.built_incomplete_ok == allow_incomplete
+            && self.built.get(..self.built_len) == Some(lengths)
+        {
+            return true; // the same code lengths as the previous block: the table is current
+        }
+        self.valid = false;
+        if lengths.len() > MAX_SYMBOLS {
+            return false;
+        }
         let mut per_length = [0u16; MAX_BITS as usize + 1];
         let mut max_length = 0u32;
         for &length in lengths {
@@ -101,55 +175,74 @@ impl Table {
             max_length = max_length.max(u32::from(length));
         }
         per_length[0] = 0;
-        let size = 1usize << max_length;
-        self.mask = size - 1;
+        self.counts = per_length;
         self.bits = max_length;
-        match self.entries.get_mut(..size) {
-            Some(slots) => slots.fill(0),
-            None => return false,
-        }
-        if max_length == 0 {
-            return true; // no codes: any code decoded later is invalid
-        }
-        let mut left: i32 = 1;
-        for &count in per_length.iter().skip(1) {
-            left = (left << 1) - i32::from(count);
-            if left < 0 {
-                return false; // over-subscribed
-            }
-        }
-        if left > 0 && !(allow_incomplete && max_length == 1) {
-            return false; // incomplete
-        }
-        let mut next_code = [0u32; MAX_BITS as usize + 2];
-        let mut code = 0u32;
-        for length in 1..=MAX_BITS as usize {
-            code = (code + u32::from(per_length.get(length - 1).copied().unwrap_or(0))) << 1;
-            if let Some(slot) = next_code.get_mut(length) {
-                *slot = code;
-            }
-        }
-        for (symbol, &length) in lengths.iter().enumerate() {
-            if length == 0 {
-                continue;
-            }
-            let Some(next) = next_code.get_mut(usize::from(length)) else {
-                return false;
-            };
-            let value = *next;
-            *next += 1;
-            // DEFLATE packs Huffman codes most significant bit first into a least-significant-first stream.
-            let reversed = (value as u16).reverse_bits() >> (16 - u32::from(length));
-            let entry = ((symbol as u16) << 4) | u16::from(length);
-            let step = 1usize << length;
-            let mut index = usize::from(reversed);
-            while index < size {
-                if let Some(slot) = self.entries.get_mut(index) {
-                    *slot = entry;
+        self.root.fill(0);
+        if max_length > 0 {
+            let mut left: i32 = 1;
+            for &count in per_length.iter().skip(1) {
+                left = (left << 1) - i32::from(count);
+                if left < 0 {
+                    return false; // over-subscribed
                 }
-                index += step;
+            }
+            if left > 0 && !(allow_incomplete && max_length == 1) {
+                return false; // incomplete
+            }
+            let mut next_code = [0u32; MAX_BITS as usize + 2];
+            let mut offsets = [0u16; MAX_BITS as usize + 2];
+            let mut code = 0u32;
+            let mut offset = 0u16;
+            for length in 1..=MAX_BITS as usize {
+                let before = per_length.get(length - 1).copied().unwrap_or(0);
+                code = (code + u32::from(before)) << 1;
+                offset += before;
+                if let Some(slot) = next_code.get_mut(length) {
+                    *slot = code;
+                }
+                if let Some(slot) = offsets.get_mut(length) {
+                    *slot = offset;
+                }
+            }
+            let root_size = 1usize << self.root_bits;
+            for (symbol, &length) in lengths.iter().enumerate() {
+                if length == 0 {
+                    continue;
+                }
+                let l = usize::from(length);
+                if let Some(off) = offsets.get_mut(l) {
+                    if let Some(slot) = self.sorted.get_mut(usize::from(*off)) {
+                        *slot = symbol as u16;
+                    }
+                    *off += 1;
+                }
+                if u32::from(length) > self.root_bits {
+                    continue;
+                }
+                let Some(next) = next_code.get_mut(l) else {
+                    return false;
+                };
+                let value = *next;
+                *next += 1;
+                // DEFLATE packs Huffman codes most significant bit first into a least-significant-first stream.
+                let reversed = (value as u16).reverse_bits() >> (16 - u32::from(length));
+                let entry = ((symbol as u16) << 4) | u16::from(length);
+                let step = 1usize << length;
+                let mut index = usize::from(reversed);
+                while index < root_size {
+                    if let Some(slot) = self.root.get_mut(index) {
+                        *slot = entry;
+                    }
+                    index += step;
+                }
             }
         }
+        if let Some(dst) = self.built.get_mut(..lengths.len()) {
+            dst.copy_from_slice(lengths);
+        }
+        self.built_len = lengths.len();
+        self.built_incomplete_ok = allow_incomplete;
+        self.valid = true;
         true
     }
 }
@@ -207,8 +300,8 @@ impl Inflater {
         if let Some(s) = fixed_lengths.get_mut(288..) {
             s.fill(5); // 32 distance codes; symbols 30 and 31 are invalid when decoded
         }
-        let mut fixed_literal_table = Table::new(9);
-        let mut fixed_distance_table = Table::new(5);
+        let mut fixed_literal_table = Table::new(LIT_ROOT_BITS);
+        let mut fixed_distance_table = Table::new(DIST_ROOT_BITS);
         if let (Some(lit), Some(dist)) = (fixed_lengths.get(..288), fixed_lengths.get(288..)) {
             // Both sets are complete by construction.
             let _ = fixed_literal_table.build(lit, false);
@@ -234,9 +327,9 @@ impl Inflater {
             repeat_symbol: 0,
             previous_length: 0,
             deferred: None,
-            code_length_table: Table::new(7),
-            literal_table: Table::new(MAX_BITS),
-            distance_table: Table::new(MAX_BITS),
+            code_length_table: Table::new(CL_ROOT_BITS),
+            literal_table: Table::new(LIT_ROOT_BITS),
+            distance_table: Table::new(DIST_ROOT_BITS),
             fixed_literal_table,
             fixed_distance_table,
             match_length: 0,
@@ -525,7 +618,10 @@ impl Inflater {
                     let mut repeat = false;
                     while self.length_index < total {
                         self.ensure(inp, ip, 7); // fewer bits are fine if the code is short
-                        let entry = self.code_length_table.lookup(self.bitbuf);
+                        let entry = self.code_length_table.decode(self.bitbuf, self.bitcount);
+                        if entry == NEED_MORE {
+                            return Ok(Status::NeedInput);
+                        }
                         let length = entry & 15;
                         if length == 0 {
                             return Err(corrupt("invalid code length code"));
@@ -592,20 +688,17 @@ impl Inflater {
                         if self.bitcount < MAX_BITS {
                             self.refill(inp, ip);
                         }
-                        let (entry, table_bits) = if self.use_fixed {
-                            (
-                                self.fixed_literal_table.lookup(self.bitbuf),
-                                self.fixed_literal_table.bits,
-                            )
+                        let entry = if self.use_fixed {
+                            self.fixed_literal_table.decode(self.bitbuf, self.bitcount)
                         } else {
-                            (self.literal_table.lookup(self.bitbuf), self.literal_table.bits)
+                            self.literal_table.decode(self.bitbuf, self.bitcount)
                         };
+                        if entry == NEED_MORE {
+                            return Ok(Status::NeedInput);
+                        }
                         let length = entry & 15;
                         if length == 0 {
-                            if self.bitcount >= table_bits {
-                                return Err(corrupt("invalid literal/length code"));
-                            }
-                            return Ok(Status::NeedInput);
+                            return Err(corrupt("invalid literal/length code"));
                         }
                         if length > self.bitcount {
                             return Ok(Status::NeedInput);
@@ -668,20 +761,17 @@ impl Inflater {
                     if self.bitcount < MAX_BITS {
                         self.refill(inp, ip);
                     }
-                    let (entry, table_bits) = if self.use_fixed {
-                        (
-                            self.fixed_distance_table.lookup(self.bitbuf),
-                            self.fixed_distance_table.bits,
-                        )
+                    let entry = if self.use_fixed {
+                        self.fixed_distance_table.decode(self.bitbuf, self.bitcount)
                     } else {
-                        (self.distance_table.lookup(self.bitbuf), self.distance_table.bits)
+                        self.distance_table.decode(self.bitbuf, self.bitcount)
                     };
+                    if entry == NEED_MORE {
+                        return Ok(Status::NeedInput);
+                    }
                     let length = entry & 15;
                     if length == 0 {
-                        if self.bitcount >= table_bits {
-                            return Err(corrupt("invalid distance code"));
-                        }
-                        return Ok(Status::NeedInput);
+                        return Err(corrupt("invalid distance code"));
                     }
                     if length > self.bitcount {
                         return Ok(Status::NeedInput);
@@ -736,9 +826,9 @@ impl Inflater {
         let base = usize::from(LENGTH_BASE.get(code).copied().unwrap_or(3));
         self.match_length = base + self.take(extra_bits) as usize;
         let entry = if self.use_fixed {
-            self.fixed_distance_table.lookup(self.bitbuf)
+            self.fixed_distance_table.decode(self.bitbuf, self.bitcount)
         } else {
-            self.distance_table.lookup(self.bitbuf)
+            self.distance_table.decode(self.bitbuf, self.bitcount)
         };
         let length = entry & 15;
         let symbol = (entry >> 4) as usize;
@@ -865,3 +955,7 @@ impl Inflater {
 #[cfg(test)]
 #[path = "inflate_tests.rs"]
 mod inflate_tests;
+
+#[cfg(test)]
+#[path = "inflate_table_tests.rs"]
+mod inflate_table_tests;
