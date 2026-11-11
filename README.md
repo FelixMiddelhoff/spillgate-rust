@@ -1,9 +1,12 @@
-# spillgate-rust
+# spillgate
 
-Decode untrusted compressed data (HTTP `Content-Encoding` chains: gzip, deflate, and with crate
-features brotli and zstd) under mandatory limits. A decompression bomb ends in a typed
-[`Error`](https://docs.rs/spillgate) instead of exhausting memory. This crate is the Rust port of
-spillgate; it implements `spec/SPEC.md` and passes the shared conformance corpus.
+Decode untrusted compressed data under mandatory limits. A decompression bomb ends in a typed
+`Error` instead of exhausting memory. Rust port of [spillgate](https://github.com/FelixMiddelhoff/spillgate):
+it implements the shared specification (`spec/SPEC.md`) and passes the shared conformance corpus.
+
+**New here? Read the [how-to guide](docs/how-to.md)**: choosing limits, wiring spillgate into
+`reqwest`, `ureq`, `axum` and other data paths, mapping results to HTTP statuses, and finding the
+places in your service that decompress today.
 
 ```rust
 use spillgate::{Decoder, ErrorKind, Limits};
@@ -33,22 +36,67 @@ fn stream(body: impl Read) -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-What it enforces: `max_output` per layer (required), an expansion ratio (default 1000 after a
-64 KiB grace), an optional `max_input`, at most 5 layers (16 hard), strict `Content-Encoding`
-parsing, bounded memory whatever the output size, sticky typed errors, and panic containment for
-extension codecs.
+The API is synchronous (`std::io::Read`). In async code run it on a blocking thread
+(`tokio::task::spawn_blocking`); the how-to shows how.
 
+## Features
+
+| Feature | Adds | Dependency |
+| --- | --- | --- |
+| (default) | `identity`, `gzip`, `deflate` (zlib and raw), own DEFLATE decoder | none |
+| `br` | brotli, `spillgate::br` | `brotli-decompressor` (pure Rust, pinned exactly) |
+| `zstd` | zstd, `spillgate::zstd` (own decoder, no dictionaries) | none |
+
+Register `br` and `zstd` with `Decoder::builder(limits).codec("br", br::codec(..)?)`; see the
+how-to, section 3.8. Minimum supported Rust version: 1.85. `unsafe` is forbidden in the crate.
+
+## Limits
+
+| Setter | What it bounds | Default |
+| --- | --- | --- |
+| `Limits::new(max_output)` | bytes each layer may produce (required) | none |
+| `max_layers` | non-identity encodings in a chain, 1..=16 | 5 |
+| `max_ratio` | output bytes per consumed input byte | 1000 |
+| `ratio_grace` | output size below which the ratio is not checked | 64 KiB |
+| `max_input` | compressed bytes taken from the source | none |
+| `disable_ratio_limit` | the one named opt-out of the ratio check | off |
+
+Memory is bounded whatever the output size: a few hundred KiB per layer, plus the window of brotli
+and zstd within their caps; `decode_all` additionally holds the bytes it produced (at most
+`max_output`). See [docs/memory.md](docs/memory.md).
+
+## Security model
+
+- Every limit is checked before the bytes are handed out; no allocation is sized from a value in
+  the data (declared sizes, headers, stream lengths).
+- `Content-Encoding` is parsed strictly; a chain is limited in length and every layer has its own
+  output and ratio budget, so a chain cannot multiply a bomb.
+- Errors are typed (`ErrorKind`), sticky, and carry at most 32 bytes of quoted attacker data.
+  `ErrorKind::http_status()` gives the status a server should answer.
+- A panic in an extension codec becomes `ErrorKind::Internal`; the crate itself avoids `unwrap`,
+  `expect`, `panic!` and unchecked indexing on input-derived data.
 - `Decoder` is immutable and `Send + Sync`: share one per process. Readers are independent and not
-  meant to be shared between threads.
-- Errors are `spillgate::Error` with `kind()`, `layer()`, `limit()`; from a reader they arrive as
-  `io::Error` and `Error::from_io` gives the typed error back. A failing source is `source_error`
-  with the original error as `source()`.
-- Cancellation is not supported in 0.1; use timeouts on the source.
+  meant to be shared between threads. `CancelToken` + `Decoder::reader_with_cancel` stop a reader
+  from another thread.
 
-See [docs/how-to.md](docs/how-to.md) for the how-to guide, `docs/design.md` for the design and
-`spec/SPEC.md` for the specification.
+Not covered: the size of the compressed request you accept before spillgate, timeouts, archive
+formats. See [SECURITY.md](SECURITY.md) to report a bypass.
 
-Tests: `cargo test`; the allocation checks need their own crate:
-`cargo test --manifest-path tools/alloc-check/Cargo.toml`.
+## Status
 
-License: MIT.
+Version 0.1 (not yet released); the API may still change before 1.0. All vectors of the shared
+conformance corpus pass with `--all-features` and no skips; every rule of the specification is
+named by a vector or a test (`tests/spectrace.rs`).
+
+## Development
+
+```text
+cargo test --all-features
+cargo test --manifest-path tools/alloc-check/Cargo.toml   # counting-allocator memory test
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). The design is in `docs/design.md`.
+
+## License
+
+MIT, see [LICENSE](LICENSE).

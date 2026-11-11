@@ -44,3 +44,12 @@ pub use decoder::{decode_all, Decoder, DecoderBuilder};
 pub use error::{quote_untrusted, Error, ErrorKind};
 pub use limits::{EffectiveLimits, Limits};
 pub use reader::SpillgateReader;
+
+// The how-to guide is compiled as documentation tests (`cargo test --all-features --doc`).
+#[cfg(doctest)]
+#[doc = include_str!("../docs/how-to.md")]
+struct HowTo;
+
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct Readme;
