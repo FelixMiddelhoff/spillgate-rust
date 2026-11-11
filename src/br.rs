@@ -21,7 +21,9 @@
 //! - The decoder is driven in output steps of at most 64 KiB, and the input it reports as used is
 //!   what the meter counts.
 //! - A stream that ends early is `corrupt`, and so are bytes after the last meta-block.
-//! - Memory per stream is the window plus the decoder's tables (a few hundred KiB).
+//! - Memory per stream is the window plus the decoder's tables: about 0.1 MiB for an ordinary stream and
+//!   up to about 3.3 MiB for a hostile one that asks for 256 block types and 256 trees of every kind
+//!   (measured in `tools/alloc-check/tests/br_memory.rs`), whatever the window cap.
 
 use std::io::BufRead;
 
@@ -83,6 +85,7 @@ impl Codec for BrotliCodec {
             max_window_bits: self.max_window_bits,
             state: None,
             finished: false,
+            failure: None,
         })
     }
 }
@@ -109,6 +112,8 @@ struct BrotliReader<'a> {
     max_window_bits: u32,
     state: Option<Box<State>>,
     finished: bool,
+    /// The error that ended the stream; later reads repeat it and the decoder state is gone.
+    failure: Option<Error>,
 }
 
 impl BrotliReader<'_> {
@@ -149,6 +154,22 @@ impl BrotliReader<'_> {
 
 impl CodecReader for BrotliReader<'_> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
+        if let Some(failure) = &self.failure {
+            return Err(failure.duplicate());
+        }
+        let result = self.read_step(buf);
+        if let Err(error) = &result {
+            // Release the window now rather than when the reader is closed, and never turn the
+            // failure into a clean end on a later call.
+            self.state = None;
+            self.failure = Some(error.duplicate());
+        }
+        result
+    }
+}
+
+impl BrotliReader<'_> {
+    fn read_step(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
         if self.finished || buf.is_empty() {
             return Ok(0);
         }
@@ -203,12 +224,128 @@ impl CodecReader for BrotliReader<'_> {
                     if matches!(result, BrotliResult::NeedsMoreInput) && source_ended {
                         return Err(Error::corrupt("brotli: the stream ends too early"));
                     }
-                    if input_offset == 0 && !source_ended {
-                        // Input was offered, nothing was used and nothing came out: no progress.
+                    if input_offset == 0 {
+                        // Nothing was used and nothing came out: no progress. (With the source at
+                        // its end this can only be `NeedsMoreOutput`; looping would never end.)
                         return Err(Error::new(ErrorKind::Internal, "brotli: the decoder made no progress"));
                     }
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+mod tests {
+    use super::*;
+    use crate::codec::Codec;
+
+    /// A valid stream: 5 bytes "hello" in one uncompressed meta-block, window 2^16.
+    fn hello() -> Vec<u8> {
+        // WBITS 16 = bit 0; ISLAST 0; MNIBBLES 0 (4 nibbles); MLEN-1 = 4 (16 bits); ISUNCOMPRESSED 1;
+        // padding to a byte; the 5 bytes; then ISLAST 1, ISLASTEMPTY 1.
+        // bits: 0 | 0 | 00 | 0010 0000 0000 0000 | 1 -> bytes, built by hand below.
+        let mut bits: Vec<bool> = Vec::new();
+        let mut put = |value: u32, n: u32| {
+            for i in 0..n {
+                bits.push((value >> i) & 1 == 1);
+            }
+        };
+        put(0, 1); // WBITS = 16
+        put(0, 1); // ISLAST
+        put(0, 2); // MNIBBLES = 4
+        put(4, 16); // MLEN - 1
+        put(1, 1); // ISUNCOMPRESSED
+        while bits.len() % 8 != 0 {
+            bits.push(false);
+        }
+        let mut out: Vec<u8> = bits
+            .chunks(8)
+            .map(|c| c.iter().enumerate().fold(0u8, |acc, (i, &b)| acc | (u8::from(b) << i)))
+            .collect();
+        out.extend_from_slice(b"hello");
+        out.push(0b11); // ISLAST = 1, ISLASTEMPTY = 1
+        out
+    }
+
+    fn reader(data: Vec<u8>) -> Box<dyn CodecReader + 'static> {
+        codec(BrotliOptions::default())
+            .unwrap()
+            .new_reader(Box::new(std::io::Cursor::new(data)))
+    }
+
+    #[test]
+    fn the_hand_built_stream_decodes() {
+        // Covers: SG-R-CDC-04
+        let mut r = reader(hello());
+        let mut buf = [0u8; 64];
+        assert_eq!(r.read(&mut buf).unwrap(), 5);
+        assert_eq!(&buf[..5], b"hello");
+        assert_eq!(r.read(&mut buf).unwrap(), 0);
+        assert_eq!(r.read(&mut buf).unwrap(), 0);
+    }
+
+    #[test]
+    fn a_failure_is_repeated_and_releases_the_decoder_state() {
+        // Covers: SG-R-CDC-04 SG-R-CDC-06 SG-R-MEM-02
+        // Regression: after the trailing-data error a later read returned Ok(0), a clean end, and
+        // the window stayed allocated until the reader was dropped.
+        let mut data = hello();
+        data.push(0xff);
+        let mut r = BrotliReader {
+            input: Box::new(std::io::Cursor::new(data)),
+            max_window_bits: 24,
+            state: None,
+            finished: false,
+            failure: None,
+        };
+        let mut buf = [0u8; 64];
+        let first = r.read(&mut buf);
+        assert_eq!(first.unwrap_err().kind(), ErrorKind::Corrupt);
+        assert!(r.state.is_none());
+        for _ in 0..3 {
+            assert_eq!(r.read(&mut buf).unwrap_err().kind(), ErrorKind::Corrupt);
+        }
+    }
+
+    #[test]
+    fn a_decoder_failure_releases_the_state_too() {
+        // Covers: SG-R-CDC-06 SG-R-MEM-02
+        let mut data = hello();
+        data[2] ^= 0xff; // damage the meta-block header
+        let mut r = BrotliReader {
+            input: Box::new(std::io::Cursor::new(data)),
+            max_window_bits: 24,
+            state: None,
+            finished: false,
+            failure: None,
+        };
+        let mut buf = [0u8; 64];
+        let kind = loop {
+            match r.read(&mut buf) {
+                Ok(0) => panic!("a damaged stream ended cleanly"),
+                Ok(_) => {}
+                Err(e) => break e.kind(),
+            }
+        };
+        assert_eq!(kind, ErrorKind::Corrupt);
+        assert!(r.state.is_none());
+        assert_eq!(r.read(&mut buf).unwrap_err().kind(), ErrorKind::Corrupt);
+    }
+
+    #[test]
+    fn a_refused_window_creates_no_decoder_state() {
+        // Covers: SG-R-CDC-04 SG-R-CDC-07
+        let mut r = BrotliReader {
+            input: Box::new(std::io::Cursor::new(vec![0x0b, 0, 0])), // WBITS 22
+            max_window_bits: 21,
+            state: None,
+            finished: false,
+            failure: None,
+        };
+        assert_eq!(r.read(&mut [0u8; 8]).unwrap_err().kind(), ErrorKind::MemoryLimit);
+        assert!(r.state.is_none());
+        assert_eq!(r.read(&mut [0u8; 8]).unwrap_err().kind(), ErrorKind::MemoryLimit);
     }
 }

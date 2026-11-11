@@ -9,4 +9,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
-spillgate = { path = "../.." }
+spillgate = { path = "../..", features = ["br"] }
+
+[dev-dependencies]
+spillgate-test-support = { path = "../../crates/test-support" }

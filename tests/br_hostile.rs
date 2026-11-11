@@ -198,7 +198,7 @@ fn the_codec_consumes_exactly_the_stream() {
         compress(&mixed(30_000), 5, 22),
         compress(&noise(4, 9000), 1, 16),
         compress(&[], 5, 22),
-        compress(&[b'x'], 11, 10),
+        compress(b"x", 11, 10),
         brotli_zeros(3 * MIB, 24).unwrap(),
         brotli_stored(&noise(9, 5000), 18).unwrap(),
     ];
