@@ -1,0 +1,10 @@
+# Text is LF everywhere so hashes and golden files are identical on every OS.
+* text=auto eol=lf
+
+# Conformance vectors are byte-exact; never normalize them.
+conformance/vectors/** -text
+*.gz -text
+*.zz -text
+*.br -text
+*.zst -text
+*.bin -text

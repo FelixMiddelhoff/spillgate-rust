@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/FelixMiddelhoff/spillgate/conformance/manifest.schema.json",
+  "title": "spillgate conformance manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "corpus_version", "vectors"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "corpus_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "vectors": { "type": "array", "items": { "$ref": "#/$defs/vector" } }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "bigint": {
+      "oneOf": [
+        { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        { "type": "string", "pattern": "^[0-9]{1,19}$" }
+      ]
+    },
+    "vector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description", "rules", "tier", "encodings", "input", "limits", "expect"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^SG-V-[A-Z]+-[0-9]{4}$" },
+        "description": { "type": "string", "minLength": 1 },
+        "rules": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^SG-(R-[A-Z]+-[0-9]{2}|I-[0-9]{2})$" }
+        },
+        "refs": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "tags": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "tier": { "enum": ["small", "large"] },
+        "encodings": { "type": "array", "items": { "type": "string" } },
+        "input": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["file", "sha256"],
+              "properties": {
+                "file": { "type": "string", "pattern": "^vectors/(small|large)/[A-Za-z0-9._/-]+$" },
+                "sha256": { "$ref": "#/$defs/sha256" }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["generator", "sha256"],
+              "properties": {
+                "generator": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["kind", "params"],
+                  "properties": {
+                    "kind": { "type": "string" },
+                    "params": { "type": "object" }
+                  }
+                },
+                "sha256": { "$ref": "#/$defs/sha256" }
+              }
+            }
+          ]
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_output": { "$ref": "#/$defs/bigint" },
+            "max_layers": { "type": "integer" },
+            "max_ratio": { "oneOf": [{ "type": "integer" }, { "const": "none" }] },
+            "ratio_grace": { "$ref": "#/$defs/bigint" },
+            "max_input": { "$ref": "#/$defs/bigint" }
+          }
+        },
+        "read_pattern": { "type": "array", "minItems": 1, "items": { "type": "integer", "minimum": -1 } },
+        "options": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "strict_zlib": { "type": "boolean" },
+            "memory_cap": { "$ref": "#/$defs/bigint" }
+          }
+        },
+        "expect": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["outcome", "length", "sha256"],
+              "properties": {
+                "outcome": { "const": "ok" },
+                "length": { "$ref": "#/$defs/bigint" },
+                "sha256": { "$ref": "#/$defs/sha256" }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["outcome", "phase"],
+              "properties": {
+                "outcome": {
+                  "enum": [
+                    "output_limit", "ratio_limit", "layer_limit", "input_limit", "memory_limit",
+                    "unsupported_encoding", "malformed_encoding", "invalid_limits", "corrupt", "internal"
+                  ]
+                },
+                "phase": { "enum": ["construct", "read"] },
+                "delivered_at_most": { "$ref": "#/$defs/bigint" },
+                "delivered_exactly": { "$ref": "#/$defs/bigint" },
+                "layer": { "type": "integer", "minimum": 1 }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

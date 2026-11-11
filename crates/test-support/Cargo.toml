@@ -1,0 +1,9 @@
+[package]
+name = "spillgate-test-support"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "Corpus generators for the spillgate conformance tests (no compression library involved)."
+
+[dependencies]
+sha2 = "0.10"
