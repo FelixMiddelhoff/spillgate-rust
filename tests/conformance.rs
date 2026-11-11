@@ -6,7 +6,7 @@
 
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic, clippy::indexing_slicing)]
 
-mod common;
+mod support;
 #[path = "../crates/test-support/src/json_spec.rs"]
 mod json_spec;
 
@@ -344,7 +344,7 @@ fn build_input(vector: &Value) -> Result<Vec<u8>, String> {
             let file = input["file"]
                 .as_str()
                 .ok_or_else(|| format!("{id}: input without file or generator"))?;
-            std::fs::read(common::root().join("conformance").join(file)).map_err(|e| format!("{id}: {file}: {e}"))?
+            std::fs::read(support::root().join("conformance").join(file)).map_err(|e| format!("{id}: {file}: {e}"))?
         }
     };
     if Some(sha256_hex(&stream).as_str()) != input["sha256"].as_str() {
@@ -375,7 +375,7 @@ fn run_vector(vector: &Value) -> Result<(), String> {
 #[test]
 fn conformance_corpus() {
     let no_skips = std::env::var("SPILLGATE_NO_SKIPS").is_ok_and(|v| !["", "0", "false", "no"].contains(&v.as_str()));
-    let manifest = common::read_manifest();
+    let manifest = support::read_manifest();
     let (mut passed, mut skipped) = (0usize, 0usize);
     let mut failures: Vec<String> = Vec::new();
     for vector in manifest["vectors"].as_array().expect("vectors") {
@@ -413,9 +413,9 @@ fn conformance_corpus() {
 
 #[test]
 fn the_manifest_is_well_formed() {
-    let spec = std::fs::read_to_string(common::root().join("spec").join("SPEC.md")).expect("spec");
-    let rules = common::defined_rules(&spec);
-    let manifest = common::read_manifest();
+    let spec = std::fs::read_to_string(support::root().join("spec").join("SPEC.md")).expect("spec");
+    let rules = support::defined_rules(&spec);
+    let manifest = support::read_manifest();
     assert_eq!(manifest["schema_version"], 1);
     let vectors = manifest["vectors"].as_array().expect("vectors");
     assert!(vectors.len() >= 200);

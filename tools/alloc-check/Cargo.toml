@@ -1,0 +1,12 @@
+# A separate workspace: the main crate forbids unsafe code (also in its tests), and a counting
+# allocator needs it. Run with `cargo test --manifest-path tools/alloc-check/Cargo.toml`.
+[workspace]
+
+[package]
+name = "spillgate-alloc-check"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+spillgate = { path = "../.." }

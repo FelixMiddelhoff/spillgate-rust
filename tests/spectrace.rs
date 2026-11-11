@@ -7,22 +7,22 @@
 
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic, clippy::indexing_slicing)]
 
-mod common;
+mod support;
 
 use std::collections::BTreeSet;
 
 #[test]
 fn every_rule_is_covered() {
-    let root = common::root();
+    let root = support::root();
     let spec = std::fs::read_to_string(root.join("spec").join("SPEC.md")).expect("spec/SPEC.md");
-    let defined = common::defined_rules(&spec);
+    let defined = support::defined_rules(&spec);
     assert!(
         defined.len() > 50,
         "found only {} rules in the spec: the extraction is broken",
         defined.len()
     );
 
-    let manifest = common::read_manifest();
+    let manifest = support::read_manifest();
     let mut covered = BTreeSet::new();
     let mut unknown_in_vectors = BTreeSet::new();
     for vector in manifest["vectors"].as_array().expect("vectors") {
@@ -37,11 +37,11 @@ fn every_rule_is_covered() {
 
     let mut files = Vec::new();
     for dir in ["src", "tests", "crates"] {
-        common::files_below(&root.join(dir), &mut files);
+        support::files_below(&root.join(dir), &mut files);
     }
     for file in files {
         if let Ok(text) = std::fs::read_to_string(&file) {
-            covered.extend(common::rule_ids_in(&text));
+            covered.extend(support::rule_ids_in(&text));
         }
     }
 
