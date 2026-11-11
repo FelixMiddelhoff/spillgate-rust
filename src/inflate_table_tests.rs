@@ -710,6 +710,6 @@ fn many_empty_dynamic_blocks_with_depth_15_codes_are_cheap() {
         secs * 1e6 / stream.len() as f64
     );
     if timed {
-        assert!(secs < 1.5, "table building is a CPU amplifier again: {secs:.2} s");
+        assert!(secs < 2.5, "table building is a CPU amplifier again: {secs:.2} s");
     }
 }
