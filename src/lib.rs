@@ -20,12 +20,13 @@
 //! Optional codecs are crate features: `br` (brotli, through the pure Rust `brotli-decompressor`)
 //! and `zstd` (an own decoder in this crate).
 
+mod cancel;
 mod codec;
 mod decoder;
 mod deflate;
 mod error;
-mod gzip;
 mod guard;
+mod gzip;
 mod header;
 mod inflate;
 mod limits;
@@ -37,6 +38,7 @@ pub mod br;
 #[cfg(feature = "zstd")]
 pub mod zstd;
 
+pub use cancel::CancelToken;
 pub use codec::{Codec, CodecReader};
 pub use decoder::{decode_all, Decoder, DecoderBuilder};
 pub use error::{quote_untrusted, Error, ErrorKind};

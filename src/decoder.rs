@@ -131,7 +131,24 @@ impl Decoder {
     pub fn reader<'a, R: Read + 'a>(&self, source: R, content_encoding: &[&str]) -> Result<SpillgateReader<'a>, Error> {
         let elements = parse_content_encoding(content_encoding)?;
         let layers = resolve_layers(elements, |name| self.codecs.contains_key(name), self.limits.max_layers)?;
-        self.build_chain(Box::new(source), &layers)
+        self.build_chain(Box::new(source), &layers, None)
+    }
+
+    /// Like [`reader`](Decoder::reader), and the reader stops with [`ErrorKind::Canceled`] (sticky)
+    /// once `token` is canceled. See [`CancelToken`](crate::CancelToken) for what is and is not
+    /// interrupted (SG-R-API-04).
+    ///
+    /// # Errors
+    /// As [`reader`](Decoder::reader).
+    pub fn reader_with_cancel<'a, R: Read + 'a>(
+        &self,
+        source: R,
+        content_encoding: &[&str],
+        token: &crate::cancel::CancelToken,
+    ) -> Result<SpillgateReader<'a>, Error> {
+        let elements = parse_content_encoding(content_encoding)?;
+        let layers = resolve_layers(elements, |name| self.codecs.contains_key(name), self.limits.max_layers)?;
+        self.build_chain(Box::new(source), &layers, Some(token.clone()))
     }
 
     /// Decode `source` completely: the whole body, or an error and no data (SG-R-API-02). The
@@ -146,14 +163,19 @@ impl Decoder {
         result
     }
 
-    fn build_chain<'a>(&self, source: Box<dyn Read + 'a>, layers: &[String]) -> Result<SpillgateReader<'a>, Error> {
+    fn build_chain<'a>(
+        &self,
+        source: Box<dyn Read + 'a>,
+        layers: &[String],
+        cancel: Option<crate::cancel::CancelToken>,
+    ) -> Result<SpillgateReader<'a>, Error> {
         let mut current = source;
         let mut first = None;
         let count = layers.len().max(1);
         for index in 1..=count {
             // The input cap applies to the chain's source only (SG-R-INP-01).
             let cap = if index == 1 { self.limits.max_input } else { 0 };
-            let meter = InputMeter::new(current, cap, index);
+            let meter = InputMeter::new(current, cap, index).with_cancel(cancel.clone());
             let handle = meter.handle();
             let first_handle = first.get_or_insert_with(|| handle.clone()).clone();
             let input: Box<dyn std::io::BufRead + 'a> = Box::new(meter);
@@ -164,7 +186,7 @@ impl Decoder {
             };
             let guard = LayerGuard::new(codec_reader, handle, index, self.limits);
             if index == count {
-                return Ok(SpillgateReader::new(guard, first_handle, self.limits));
+                return Ok(SpillgateReader::new(guard, first_handle, self.limits).with_cancel(cancel));
             }
             current = Box::new(guard);
         }

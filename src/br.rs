@@ -48,7 +48,9 @@ pub struct BrotliOptions {
 
 impl Default for BrotliOptions {
     fn default() -> Self {
-        BrotliOptions { max_window_bits: DEFAULT_MAX_WINDOW_BITS }
+        BrotliOptions {
+            max_window_bits: DEFAULT_MAX_WINDOW_BITS,
+        }
     }
 }
 
@@ -69,12 +71,19 @@ pub fn codec(options: BrotliOptions) -> Result<BrotliCodec, Error> {
             format!("max_window_bits must be in {MIN_WINDOW_BITS}..={DEFAULT_MAX_WINDOW_BITS}"),
         ));
     }
-    Ok(BrotliCodec { max_window_bits: options.max_window_bits })
+    Ok(BrotliCodec {
+        max_window_bits: options.max_window_bits,
+    })
 }
 
 impl Codec for BrotliCodec {
     fn new_reader<'a>(&self, input: Box<dyn BufRead + 'a>) -> Box<dyn CodecReader + 'a> {
-        Box::new(BrotliReader { input, max_window_bits: self.max_window_bits, state: None, finished: false })
+        Box::new(BrotliReader {
+            input,
+            max_window_bits: self.max_window_bits,
+            state: None,
+            finished: false,
+        })
     }
 }
 
@@ -113,12 +122,18 @@ impl BrotliReader<'_> {
         };
         let (bits, large_window) = window_bits(first);
         if large_window {
-            return Err(Error::new(ErrorKind::MemoryLimit, "brotli stream asks for a large window (not supported)"));
+            return Err(Error::new(
+                ErrorKind::MemoryLimit,
+                "brotli stream asks for a large window (not supported)",
+            ));
         }
         if bits > self.max_window_bits {
             return Err(Error::new(
                 ErrorKind::MemoryLimit,
-                format!("brotli stream asks for a window of 2^{bits} bytes (the cap is 2^{})", self.max_window_bits),
+                format!(
+                    "brotli stream asks for a window of 2^{bits} bytes (the cap is 2^{})",
+                    self.max_window_bits
+                ),
             )
             .with_limit(1u64 << self.max_window_bits));
         }
@@ -163,7 +178,10 @@ impl CodecReader for BrotliReader<'_> {
                 state,
             );
             if input_offset > view.len() || output_offset > step {
-                return Err(Error::new(ErrorKind::Internal, "brotli: the decoder reported an impossible position"));
+                return Err(Error::new(
+                    ErrorKind::Internal,
+                    "brotli: the decoder reported an impossible position",
+                ));
             }
             self.input.consume(input_offset);
             match result {

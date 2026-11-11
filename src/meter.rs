@@ -60,6 +60,7 @@ pub(crate) struct InputMeter<R> {
     layer: usize,
     ended: bool,
     state: MeterHandle,
+    cancel: Option<crate::cancel::CancelToken>,
 }
 
 impl<R: Read> InputMeter<R> {
@@ -76,7 +77,14 @@ impl<R: Read> InputMeter<R> {
             layer,
             ended: false,
             state: MeterHandle::default(),
+            cancel: None,
         }
+    }
+
+    /// Fail every later fetch once `token` is canceled (SG-R-API-04).
+    pub(crate) fn with_cancel(mut self, token: Option<crate::cancel::CancelToken>) -> InputMeter<R> {
+        self.cancel = token;
+        self
     }
 
     pub(crate) fn handle(&self) -> MeterHandle {
@@ -176,6 +184,9 @@ impl<R: Read> BufRead for InputMeter<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         if let Some(error) = self.state.failure() {
             return Err(io::Error::from(error));
+        }
+        if self.cancel.as_ref().is_some_and(|token| token.is_canceled()) {
+            return Err(self.fail(Error::new(ErrorKind::Canceled, "the reader was canceled")));
         }
         if self.pos >= self.filled {
             if let Err(error) = self.refill() {

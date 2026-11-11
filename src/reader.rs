@@ -24,6 +24,7 @@ pub struct SpillgateReader<'a> {
     limits: EffectiveLimits,
     produced: u64,
     outcome: Outcome,
+    cancel: Option<crate::cancel::CancelToken>,
 }
 
 impl fmt::Debug for SpillgateReader<'_> {
@@ -44,7 +45,13 @@ impl<'a> SpillgateReader<'a> {
             limits,
             produced: 0,
             outcome: Outcome::Running,
+            cancel: None,
         }
+    }
+
+    pub(crate) fn with_cancel(mut self, token: Option<crate::cancel::CancelToken>) -> SpillgateReader<'a> {
+        self.cancel = token;
+        self
     }
 
     /// Release all codec state. Idempotent; the caller's source is not closed (SG-R-RDR-06). Reads
@@ -57,6 +64,11 @@ impl<'a> SpillgateReader<'a> {
     pub(crate) fn read_typed(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
         if let Some(replayed) = self.outcome.replay() {
             return replayed;
+        }
+        if self.cancel.as_ref().is_some_and(|token| token.is_canceled()) {
+            let error = Error::new(ErrorKind::Canceled, "the reader was canceled");
+            self.outcome = Outcome::Failed(error.duplicate());
+            return Err(error);
         }
         let Some(top) = self.top.as_mut() else {
             return Err(Error::new(ErrorKind::Internal, "the reader is closed"));

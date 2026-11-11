@@ -47,8 +47,7 @@ impl SpillgateReader<'_> { pub fn close(&mut self); /* idempotent, SG-R-RDR-06 *
 - Codec registration errors (SG-R-CDC-09: ill-formed, reserved or duplicate name) are reported by
   `build()` as the new variant `ErrorKind::InvalidOption` (`as_str` = `"invalid_option"`, HTTP 500);
   bad limits stay `ErrorKind::InvalidLimits`. The core part adds the variant to `error.rs`.
-- Cancellation (SG-R-API-04) is not supported in 0.1 (documented in the how-to: use source
-  timeouts); the `Canceled` kind exists for forward compatibility. The spec says "if supported".
+- Cancellation (SG-R-API-04): `CancelToken` + `Decoder::reader_with_cancel`; checked on every read and every input fetch (src/cancel.rs).
 - Source errors: an `io::Error` from the caller's source is `source_error` with the original as
   `Error::source()`; `ErrorKind::Interrupted` is retried by the meter like `read_exact` does.
 

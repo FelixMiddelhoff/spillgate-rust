@@ -6,9 +6,9 @@
 
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic, clippy::indexing_slicing)]
 
-mod support;
 #[path = "../crates/test-support/src/json_spec.rs"]
 mod json_spec;
+mod support;
 
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -87,11 +87,7 @@ fn needed_codecs(vector: &Value) -> Vec<String> {
 }
 
 fn codec_available(name: &str) -> bool {
-    match name {
-        "br" => cfg!(feature = "br"),
-        "zstd" => cfg!(feature = "zstd"),
-        _ => false,
-    }
+    (name == "br" && cfg!(feature = "br")) || (name == "zstd" && cfg!(feature = "zstd"))
 }
 
 /// The largest brotli window bits (10..24) whose window, 2^n - 16 bytes, fits `limit`.

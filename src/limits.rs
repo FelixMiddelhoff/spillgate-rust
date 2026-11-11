@@ -34,7 +34,14 @@ pub struct Limits {
 impl Limits {
     /// Limits with the required output bound: the bytes one layer may produce, `1 ..= 2^63-1`.
     pub fn new(max_output: u64) -> Limits {
-        Limits { max_output, max_layers: None, max_ratio: None, ratio_grace: None, max_input: None, disable_ratio_limit: false }
+        Limits {
+            max_output,
+            max_layers: None,
+            max_ratio: None,
+            ratio_grace: None,
+            max_input: None,
+            disable_ratio_limit: false,
+        }
     }
 
     /// The longest chain of non-identity encodings, `1 ..= 16`. Default 5. An explicit 0 is invalid.
@@ -100,7 +107,10 @@ impl EffectiveLimits {
     /// Validate `limits` completely.
     pub fn from_limits(limits: &Limits) -> Result<EffectiveLimits, Error> {
         if limits.max_output < 1 || limits.max_output > MAX_BYTES {
-            return Err(invalid(format!("max_output must be in 1..={MAX_BYTES}, got {}", limits.max_output)));
+            return Err(invalid(format!(
+                "max_output must be in 1..={MAX_BYTES}, got {}",
+                limits.max_output
+            )));
         }
         let max_layers = match limits.max_layers {
             None => DEFAULT_MAX_LAYERS,
@@ -108,7 +118,9 @@ impl EffectiveLimits {
             Some(n) => return Err(invalid(format!("max_layers must be in 1..={HARD_MAX_LAYERS}, got {n}"))),
         };
         if limits.disable_ratio_limit && limits.max_ratio.is_some() {
-            return Err(invalid("max_ratio contradicts disable_ratio_limit; set only one".into()));
+            return Err(invalid(
+                "max_ratio contradicts disable_ratio_limit; set only one".into(),
+            ));
         }
         let max_ratio = if limits.disable_ratio_limit {
             0
@@ -129,7 +141,13 @@ impl EffectiveLimits {
             Some(n) if (1..=MAX_BYTES).contains(&n) => n,
             Some(n) => return Err(invalid(format!("max_input must be in 1..={MAX_BYTES}, got {n}"))),
         };
-        Ok(EffectiveLimits { max_output: limits.max_output, max_layers, max_ratio, ratio_grace, max_input })
+        Ok(EffectiveLimits {
+            max_output: limits.max_output,
+            max_layers,
+            max_ratio,
+            ratio_grace,
+            max_input,
+        })
     }
 
     /// SG-R-RAT-01: `produced > max_ratio * max(consumed, 1)`, past the grace, in arithmetic that
