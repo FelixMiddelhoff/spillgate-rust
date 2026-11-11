@@ -69,7 +69,7 @@ fn the_status_table_of_the_guide_matches_http_status() {
         (UnsupportedEncoding, 415),
         (MalformedEncoding, 400),
         (Corrupt, 400),
-        (MemoryLimit, 503),
+        (MemoryLimit, 413),
         (SourceError, 400),
         (Canceled, 503),
         (Internal, 500),

@@ -572,7 +572,7 @@ pub fn refusal(error: &Error) -> u16 {
 | `UnsupportedEncoding` | a valid token the decoder cannot handle (`compress`, `dcz`, `aes128gcm`, ...) | 415 | failed; nothing was decoded | info; shows clients using something you do not offer |
 | `MalformedEncoding` | the header breaks the strict grammar | 400 | failed | info, bounded text only |
 | `Corrupt` | the stream is invalid, truncated or has trailing data | 400 | may retry once if the connection was cut; a repeat is a bad server | info |
-| `MemoryLimit` | a brotli or zstd stream needs a larger window than the cap | 503 | failed, do not retry | warn; check the cap if legitimate traffic hits it |
+| `MemoryLimit` | a brotli or zstd stream needs a larger window than the cap | 413 | failed, do not retry | warn; check the cap if legitimate traffic hits it |
 | `SourceError` | your source (network, disk) failed; the original `io::Error` is `Error::source()` | 400 (or 5xx by your policy) | retry by your usual policy | the cause is in `source()` |
 | `Canceled` | your `CancelToken` was canceled | 503, usually no response is needed | no retry by itself | debug |
 | `Internal` | a codec or source broke its contract (a panic, no progress) | 500 | failed | **error and alert**: please report it (see `SECURITY.md`) |
@@ -580,7 +580,7 @@ pub fn refusal(error: &Error) -> u16 {
 
 The status column is exactly what `ErrorKind::http_status()` returns, the same mapping as in the
 other spillgate ports: 413 for output, ratio, layer and input limits, 415 for unsupported
-encodings, 400 for malformed header, corrupt data and a failed read, 503 for the memory limit and
+encodings, 400 for malformed header, corrupt data and a failed read, 503 for
 cancellation, 500 otherwise.
 
 General rules:

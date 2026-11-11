@@ -61,15 +61,19 @@ impl ErrorKind {
     }
 
     /// The HTTP status a server should answer for this outcome when decoding a request body:
-    /// 413 for output, ratio, input and layer limits; 415 for an unsupported encoding; 400 for a
-    /// malformed header, corrupt data and a failed read; 503 for the memory limit and cancellation;
+    /// 413 for output, ratio, input, layer and memory limits; 415 for an unsupported encoding; 400 for a
+    /// malformed header, corrupt data and a failed read; 503 for cancellation;
     /// 500 otherwise.
     pub fn http_status(self) -> u16 {
         match self {
-            ErrorKind::OutputLimit | ErrorKind::RatioLimit | ErrorKind::InputLimit | ErrorKind::LayerLimit => 413,
+            ErrorKind::OutputLimit
+            | ErrorKind::RatioLimit
+            | ErrorKind::InputLimit
+            | ErrorKind::LayerLimit
+            | ErrorKind::MemoryLimit => 413,
             ErrorKind::UnsupportedEncoding => 415,
             ErrorKind::MalformedEncoding | ErrorKind::Corrupt | ErrorKind::SourceError => 400,
-            ErrorKind::MemoryLimit | ErrorKind::Canceled => 503,
+            ErrorKind::Canceled => 503,
             ErrorKind::InvalidLimits | ErrorKind::InvalidOption | ErrorKind::Internal => 500,
         }
     }

@@ -415,7 +415,7 @@ fn error_kinds_have_names_and_statuses() {
         (ErrorKind::RatioLimit, "ratio_limit", 413),
         (ErrorKind::LayerLimit, "layer_limit", 413),
         (ErrorKind::InputLimit, "input_limit", 413),
-        (ErrorKind::MemoryLimit, "memory_limit", 503),
+        (ErrorKind::MemoryLimit, "memory_limit", 413),
         (ErrorKind::UnsupportedEncoding, "unsupported_encoding", 415),
         (ErrorKind::MalformedEncoding, "malformed_encoding", 400),
         (ErrorKind::Corrupt, "corrupt", 400),
