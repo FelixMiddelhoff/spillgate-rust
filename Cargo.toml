@@ -30,6 +30,8 @@ flate2 = "1"
 sha2 = "0.10"
 serde_json = "1"
 zstd = "0.13"
+# Reference brotli encoder (and reference decoder for differential tests); tests only.
+brotli = { version = "8", default-features = false, features = ["std"] }
 
 [lints.rust]
 unsafe_code = "forbid"
@@ -43,4 +45,10 @@ indexing_slicing = "warn"
 
 # The reference encoder is C code; build it optimized even in debug test runs.
 [profile.dev.package.zstd-sys]
+opt-level = 3
+
+# The reference brotli encoder and the decoder under test, optimized even in debug test runs.
+[profile.dev.package.brotli]
+opt-level = 3
+[profile.dev.package.brotli-decompressor]
 opt-level = 3
