@@ -32,7 +32,10 @@ fn sg_r_lim_01_max_output_is_required_and_positive() {
     bad(Limits::new(INT64 + 1));
     bad(Limits::new(u64::MAX));
     bad(Limits::new(1 << 63));
-    assert_eq!(Decoder::new(Limits::new(0)).unwrap_err().kind(), ErrorKind::InvalidLimits);
+    assert_eq!(
+        Decoder::new(Limits::new(0)).unwrap_err().kind(),
+        ErrorKind::InvalidLimits
+    );
 }
 
 #[test]
@@ -155,18 +158,39 @@ fn sg_r_cdc_09_codec_names_are_checked() {
         assert_eq!(e.kind().http_status(), 500);
     }
     // not lower case, not a token
-    for name in ["Gzip", "BR", "", " br", "br;q=1", "a b", "-x", ".x", "\u{e9}", &"a".repeat(33), "x\n", "x,y"] {
+    for name in [
+        "Gzip",
+        "BR",
+        "",
+        " br",
+        "br;q=1",
+        "a b",
+        "-x",
+        ".x",
+        "\u{e9}",
+        &"a".repeat(33),
+        "x\n",
+        "x,y",
+    ] {
         assert_eq!(build(name).unwrap_err().kind(), ErrorKind::InvalidOption, "{name:?}");
     }
     for name in ["br", "zstd", "x", "a.b_c-d", "9", &"a".repeat(32)] {
         build(name).unwrap();
     }
     // twice
-    let e = Decoder::builder(Limits::new(10)).codec("br", Pass).codec("br", Pass).build().unwrap_err();
+    let e = Decoder::builder(Limits::new(10))
+        .codec("br", Pass)
+        .codec("br", Pass)
+        .build()
+        .unwrap_err();
     assert_eq!(e.kind(), ErrorKind::InvalidOption);
     // errors do not hide invalid limits and the other way around
     assert_eq!(
-        Decoder::builder(Limits::new(0)).codec("gzip", Pass).build().unwrap_err().kind(),
+        Decoder::builder(Limits::new(0))
+            .codec("gzip", Pass)
+            .build()
+            .unwrap_err()
+            .kind(),
         ErrorKind::InvalidLimits
     );
     // the message never carries more than 32 bytes of the name
@@ -181,8 +205,14 @@ fn sg_r_cdc_09_registered_codecs_are_per_decoder_not_global() {
     let with = decoder(loose());
     let without = Decoder::new(loose()).unwrap();
     assert_eq!(run(&with, b"abc", &["pass"], 16).bytes, b"abc");
-    assert_eq!(run(&without, b"abc", &["pass"], 16).kind, Some(ErrorKind::UnsupportedEncoding));
-    assert_eq!(run(&without, b"abc", &["br"], 16).kind, Some(ErrorKind::UnsupportedEncoding));
+    assert_eq!(
+        run(&without, b"abc", &["pass"], 16).kind,
+        Some(ErrorKind::UnsupportedEncoding)
+    );
+    assert_eq!(
+        run(&without, b"abc", &["br"], 16).kind,
+        Some(ErrorKind::UnsupportedEncoding)
+    );
 }
 
 #[test]
@@ -193,8 +223,21 @@ fn sg_r_cdc_09_builtin_and_optional_names() {
         plain.reader(&b""[..], &[header]).unwrap();
     }
     // the optional codecs are only available when registered
-    for header in ["br", "zstd", "compress", "dcb", "dcz", "aes128gcm", "snappy", "deflate64"] {
-        assert_eq!(plain.reader(&b""[..], &[header]).unwrap_err().kind(), ErrorKind::UnsupportedEncoding, "{header}");
+    for header in [
+        "br",
+        "zstd",
+        "compress",
+        "dcb",
+        "dcz",
+        "aes128gcm",
+        "snappy",
+        "deflate64",
+    ] {
+        assert_eq!(
+            plain.reader(&b""[..], &[header]).unwrap_err().kind(),
+            ErrorKind::UnsupportedEncoding,
+            "{header}"
+        );
     }
 }
 
@@ -248,7 +291,15 @@ fn sg_r_hdr_14_equivalent_presentations_decode_the_same() {
 fn sg_r_hdr_03_the_empty_header_is_the_identity_chain() {
     // Covers: SG-R-HDR-03 SG-R-HDR-10 SG-R-CDC-10
     let d = decoder(loose());
-    for p in [vec![], vec![""], vec![" "], vec![","], vec!["identity"], vec!["identity, identity"], vec![", ,\t,"]] {
+    for p in [
+        vec![],
+        vec![""],
+        vec![" "],
+        vec![","],
+        vec!["identity"],
+        vec!["identity, identity"],
+        vec![", ,\t,"],
+    ] {
         let o = run(&d, b"payload", &p, 3);
         assert_eq!(o.bytes, b"payload", "{p:?}");
         assert_eq!(o.kind, None, "{p:?}");
@@ -300,23 +351,40 @@ fn sg_r_hdr_02_sg_r_hdr_06_sg_r_hdr_11_header_limits_through_the_decoder() {
     let e = d.reader(&b"x"[..], &[&seventeen]).unwrap_err();
     assert_eq!(e.kind(), ErrorKind::LayerLimit);
     assert_eq!(e.limit(), 16);
-    assert_eq!(d.reader(&b"x"[..], &[&vec!["identity"; 17].join(",")]).unwrap_err().kind(), ErrorKind::LayerLimit);
+    assert_eq!(
+        d.reader(&b"x"[..], &[&vec!["identity"; 17].join(",")])
+            .unwrap_err()
+            .kind(),
+        ErrorKind::LayerLimit
+    );
     // 17 elements but only unsupported: the count comes first
-    assert_eq!(d.reader(&b"x"[..], &[&vec!["compress"; 17].join(",")]).unwrap_err().kind(), ErrorKind::LayerLimit);
+    assert_eq!(
+        d.reader(&b"x"[..], &[&vec!["compress"; 17].join(",")])
+            .unwrap_err()
+            .kind(),
+        ErrorKind::LayerLimit
+    );
     // too long
     let long = format!("pass{}", " ".repeat(1021));
-    assert_eq!(d.reader(&b"x"[..], &[&long]).unwrap_err().kind(), ErrorKind::MalformedEncoding);
+    assert_eq!(
+        d.reader(&b"x"[..], &[&long]).unwrap_err().kind(),
+        ErrorKind::MalformedEncoding
+    );
     let ok = format!("pass{}", " ".repeat(1020));
     d.reader(&b"x"[..], &[&ok]).unwrap();
     // default MaxLayers is 5, identity does not count
     let d5 = decoder(Limits::new(1 << 20).disable_ratio_limit());
-    d5.reader(&b"x"[..], &["pass,pass,pass,pass,pass,identity,identity"]).unwrap();
+    d5.reader(&b"x"[..], &["pass,pass,pass,pass,pass,identity,identity"])
+        .unwrap();
     let e = d5.reader(&b"x"[..], &["pass,pass,pass,pass,pass,pass"]).unwrap_err();
     assert_eq!(e.kind(), ErrorKind::LayerLimit);
     assert_eq!(e.limit(), 5);
     // the layer limit is reported at construction, before any read
     let d1 = decoder(Limits::new(1 << 20).max_layers(1).disable_ratio_limit());
-    assert_eq!(d1.reader(&b"x"[..], &["pass, pass"]).unwrap_err().kind(), ErrorKind::LayerLimit);
+    assert_eq!(
+        d1.reader(&b"x"[..], &["pass, pass"]).unwrap_err().kind(),
+        ErrorKind::LayerLimit
+    );
 }
 
 #[test]
@@ -360,7 +428,10 @@ fn error_kinds_have_names_and_statuses() {
         assert_eq!(kind.to_string(), name);
         assert_eq!(kind.http_status(), status, "{name}");
     }
-    let e = Error::new(ErrorKind::OutputLimit, "m").with_limit(5).with_layer(2).with_layer(3);
+    let e = Error::new(ErrorKind::OutputLimit, "m")
+        .with_limit(5)
+        .with_layer(2)
+        .with_layer(3);
     assert_eq!((e.kind(), e.limit(), e.layer()), (ErrorKind::OutputLimit, 5, 2));
     assert!(e.to_string().contains("layer 2") && e.to_string().contains("limit 5"));
 }

@@ -1,5 +1,11 @@
 //! Shared helpers for the core tests: small test-only codecs and misbehaving sources.
-#![allow(dead_code, clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+#![allow(
+    dead_code,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
 
 use std::cell::Cell;
 use std::io::{self, BufRead, Read};
@@ -9,7 +15,9 @@ use spillgate::{Codec, CodecReader, Decoder, Error, ErrorKind, Limits};
 
 /// The typed kind inside an io error returned by a spillgate reader.
 pub fn kind_of(error: &io::Error) -> ErrorKind {
-    Error::from_io(error).unwrap_or_else(|| panic!("not a spillgate error: {error:?}")).kind()
+    Error::from_io(error)
+        .unwrap_or_else(|| panic!("not a spillgate error: {error:?}"))
+        .kind()
 }
 
 // -- codecs -----------------------------------------------------------------------------------
@@ -88,7 +96,12 @@ impl CodecReader for ExpandReader<'_> {
 }
 impl Codec for Expand {
     fn new_reader<'a>(&self, input: Box<dyn BufRead + 'a>) -> Box<dyn CodecReader + 'a> {
-        Box::new(ExpandReader { input, factor: self.0, byte: 0, left: 0 })
+        Box::new(ExpandReader {
+            input,
+            factor: self.0,
+            byte: 0,
+            left: 0,
+        })
     }
 }
 
@@ -295,7 +308,9 @@ impl StoredReader<'_> {
     fn byte(&mut self) -> Result<u8, Error> {
         let b = {
             let avail = self.input.fill_buf().map_err(Error::from_input)?;
-            *avail.first().ok_or_else(|| Error::corrupt("stored: the stream ends too early"))?
+            *avail
+                .first()
+                .ok_or_else(|| Error::corrupt("stored: the stream ends too early"))?
         };
         self.input.consume(1);
         Ok(b)
@@ -309,7 +324,11 @@ impl CodecReader for StoredReader<'_> {
                     let lo = self.byte()?;
                     let hi = self.byte()?;
                     let len = usize::from(u16::from_le_bytes([lo, hi]));
-                    self.state = if len == 0 { StoredState::Trailer } else { StoredState::Body(len) };
+                    self.state = if len == 0 {
+                        StoredState::Trailer
+                    } else {
+                        StoredState::Body(len)
+                    };
                 }
                 StoredState::Body(left) => {
                     let n = {
@@ -322,7 +341,11 @@ impl CodecReader for StoredReader<'_> {
                         n
                     };
                     self.input.consume(n);
-                    self.state = if n == left { StoredState::Len } else { StoredState::Body(left - n) };
+                    self.state = if n == left {
+                        StoredState::Len
+                    } else {
+                        StoredState::Body(left - n)
+                    };
                     return Ok(n);
                 }
                 StoredState::Trailer => {
@@ -344,7 +367,10 @@ impl CodecReader for StoredReader<'_> {
 }
 impl Codec for Stored {
     fn new_reader<'a>(&self, input: Box<dyn BufRead + 'a>) -> Box<dyn CodecReader + 'a> {
-        Box::new(StoredReader { input, state: StoredState::Len })
+        Box::new(StoredReader {
+            input,
+            state: StoredState::Len,
+        })
     }
 }
 
@@ -368,7 +394,12 @@ pub struct Chunked {
 }
 impl Chunked {
     pub fn new(data: impl Into<Vec<u8>>, step: usize) -> Chunked {
-        Chunked { data: data.into(), pos: 0, step: step.max(1), counters: Counters::default() }
+        Chunked {
+            data: data.into(),
+            pos: 0,
+            step: step.max(1),
+            counters: Counters::default(),
+        }
     }
 }
 impl Read for Chunked {
@@ -394,7 +425,12 @@ pub struct FailAfter {
 }
 impl FailAfter {
     pub fn new(data: impl Into<Vec<u8>>, make: fn() -> io::Error) -> FailAfter {
-        FailAfter { data: data.into(), pos: 0, make, calls: Rc::default() }
+        FailAfter {
+            data: data.into(),
+            pos: 0,
+            make,
+            calls: Rc::default(),
+        }
     }
 }
 impl Read for FailAfter {
@@ -418,7 +454,11 @@ pub struct Interrupted<R> {
 }
 impl<R> Interrupted<R> {
     pub fn new(inner: R, times: usize) -> Interrupted<R> {
-        Interrupted { inner, times, left: times }
+        Interrupted {
+            inner,
+            times,
+            left: times,
+        }
     }
 }
 impl<R: Read> Read for Interrupted<R> {
@@ -502,7 +542,12 @@ pub fn drain<R: Read>(reader: &mut R, read_size: usize) -> Outcome {
         match reader.read(&mut buf) {
             Ok(0) => return Outcome { bytes, kind: None },
             Ok(n) => bytes.extend_from_slice(&buf[..n]),
-            Err(e) => return Outcome { bytes, kind: Some(kind_of(&e)) },
+            Err(e) => {
+                return Outcome {
+                    bytes,
+                    kind: Some(kind_of(&e)),
+                }
+            }
         }
     }
 }
@@ -510,7 +555,10 @@ pub fn drain<R: Read>(reader: &mut R, read_size: usize) -> Outcome {
 /// Decode `data` through `header` with `decoder` and the given read size.
 pub fn run(decoder: &Decoder, data: &[u8], header: &[&str], read_size: usize) -> Outcome {
     match decoder.reader(data, header) {
-        Err(e) => Outcome { bytes: Vec::new(), kind: Some(e.kind()) },
+        Err(e) => Outcome {
+            bytes: Vec::new(),
+            kind: Some(e.kind()),
+        },
         Ok(mut reader) => {
             let out = drain(&mut reader, read_size);
             reader.close();

@@ -43,7 +43,14 @@ fn typed(reader: &mut impl Read, size: usize) -> (Vec<u8>, Option<Info>) {
             Ok(n) => out.extend_from_slice(&buf[..n]),
             Err(e) => {
                 let e = Error::from_io(&e).expect("a spillgate error");
-                return (out, Some(Info { kind: e.kind(), layer: e.layer(), limit: e.limit() }));
+                return (
+                    out,
+                    Some(Info {
+                        kind: e.kind(),
+                        layer: e.layer(),
+                        limit: e.limit(),
+                    }),
+                );
             }
         }
     }
@@ -158,7 +165,10 @@ fn sg_r_lay_04_a_limit_hit_is_never_a_clean_end() {
 fn sg_i_01_a_bomb_never_delivers_more_than_the_budget() {
     // Covers: SG-I-01 SG-R-LAY-02 SG-R-CDC-01 SG-R-MEM-02
     for max in [1u64, 2, 65535, 65536, 65537, 200_000] {
-        let d = Decoder::builder(Limits::new(max).disable_ratio_limit()).codec("zeros", Zeros(u64::MAX)).build().unwrap();
+        let d = Decoder::builder(Limits::new(max).disable_ratio_limit())
+            .codec("zeros", Zeros(u64::MAX))
+            .build()
+            .unwrap();
         for &size in &READ_SIZES {
             let mut r = d.reader(&b""[..], &["zeros"]).unwrap();
             let (bytes, error) = typed(&mut r, size);
@@ -168,7 +178,10 @@ fn sg_i_01_a_bomb_never_delivers_more_than_the_budget() {
         }
     }
     // a bomb of exactly max bytes is fine
-    let d = Decoder::builder(Limits::new(70_000).disable_ratio_limit()).codec("zeros", Zeros(70_000)).build().unwrap();
+    let d = Decoder::builder(Limits::new(70_000).disable_ratio_limit())
+        .codec("zeros", Zeros(70_000))
+        .build()
+        .unwrap();
     let o = run(&d, b"", &["zeros"], 9999);
     assert_eq!((o.kind, o.bytes.len()), (None, 70_000));
 }
@@ -192,7 +205,10 @@ fn max_step_bounds_every_codec_call() {
             Box::new(R)
         }
     }
-    let d = Decoder::builder(Limits::new(10 << 20).disable_ratio_limit()).codec("spy", Spy2).build().unwrap();
+    let d = Decoder::builder(Limits::new(10 << 20).disable_ratio_limit())
+        .codec("spy", Spy2)
+        .build()
+        .unwrap();
     let mut r = d.reader(&b""[..], &["spy"]).unwrap();
     let mut buf = vec![0u8; 8 << 20];
     let mut total = 0;
@@ -221,7 +237,10 @@ fn sg_r_rat_01_the_ratio_fires_at_the_exact_byte_with_single_byte_reads() {
     let o = run(&d, &[1u8; 5000], &["expand10"], 1);
     assert_eq!((o.kind, o.bytes.len()), (None, 50_000));
     // expand11 against ratio 10 fires at the first byte past 10 * C
-    let d = Decoder::builder(Limits::new(1 << 30).max_ratio(10).ratio_grace(0)).codec("e11", Expand(11)).build().unwrap();
+    let d = Decoder::builder(Limits::new(1 << 30).max_ratio(10).ratio_grace(0))
+        .codec("e11", Expand(11))
+        .build()
+        .unwrap();
     let o = run(&d, &[1u8; 50], &["e11"], 1);
     assert_eq!((o.kind, o.bytes.len()), (Some(ErrorKind::RatioLimit), 11));
 }
@@ -230,7 +249,10 @@ fn sg_r_rat_01_the_ratio_fires_at_the_exact_byte_with_single_byte_reads() {
 fn sg_r_rat_01_the_grace_boundary() {
     // Covers: SG-R-RAT-01 SG-R-LIM-05
     let e100 = |grace: u64| {
-        Decoder::builder(Limits::new(1 << 30).max_ratio(1).ratio_grace(grace)).codec("e100", Expand(100)).build().unwrap()
+        Decoder::builder(Limits::new(1 << 30).max_ratio(1).ratio_grace(grace))
+            .codec("e100", Expand(100))
+            .build()
+            .unwrap()
     };
     // C = 1 up to the 100th byte, 2 from the 101st: P = 101 > 1*2 fires once P > grace
     for grace in [0u64, 50, 100, 101, 150] {
@@ -251,7 +273,10 @@ fn sg_r_rat_01_the_grace_boundary() {
 fn sg_r_rat_01_consumed_counts_as_at_least_one() {
     // Covers: SG-R-RAT-01
     // A bomb that consumes nothing is judged against max(C, 1).
-    let d = Decoder::builder(Limits::new(1 << 30)).codec("zeros", Zeros(u64::MAX)).build().unwrap();
+    let d = Decoder::builder(Limits::new(1 << 30))
+        .codec("zeros", Zeros(u64::MAX))
+        .build()
+        .unwrap();
     let mut r = d.reader(&b""[..], &["zeros"]).unwrap();
     let (bytes, error) = typed(&mut r, 1);
     let e = error.unwrap();
@@ -265,14 +290,20 @@ fn sg_r_rat_01_consumed_counts_as_at_least_one() {
 fn sg_r_rat_02_read_ahead_gives_no_credit() {
     // Covers: SG-R-RAT-02 SG-R-INP-02
     // The whole 4 KiB source is fetched at once, but the codec consumes one byte per 1001 outputs.
-    let d = Decoder::builder(Limits::new(1 << 30).max_ratio(1000).ratio_grace(0)).codec("e1001", Expand(1001)).build().unwrap();
+    let d = Decoder::builder(Limits::new(1 << 30).max_ratio(1000).ratio_grace(0))
+        .codec("e1001", Expand(1001))
+        .build()
+        .unwrap();
     let source = Chunked::new(vec![1u8; 4096], 4096);
     let mut r = d.reader(source, &["e1001"]).unwrap();
     let (bytes, error) = typed(&mut r, 1);
     assert_eq!(error.unwrap().kind(), ErrorKind::RatioLimit);
     assert_eq!(bytes.len(), 1001);
     // the same at exactly the ratio never fires
-    let d = Decoder::builder(Limits::new(1 << 30).max_ratio(1000).ratio_grace(0)).codec("e1000", Expand(1000)).build().unwrap();
+    let d = Decoder::builder(Limits::new(1 << 30).max_ratio(1000).ratio_grace(0))
+        .codec("e1000", Expand(1000))
+        .build()
+        .unwrap();
     let source = Chunked::new(vec![1u8; 4096], 4096);
     let mut r = d.reader(source, &["e1000"]).unwrap();
     let (bytes, error) = typed(&mut r, 1 << 16);
@@ -340,10 +371,16 @@ fn sg_r_rat_04_the_opt_out_leaves_the_other_limits_in_force() {
     let (bytes, error) = typed(&mut r, 1 << 16);
     assert_eq!(bytes.len(), 200_000);
     assert_eq!(error.unwrap().kind(), ErrorKind::OutputLimit);
-    let d = Decoder::builder(Limits::new(1 << 30).disable_ratio_limit().max_input(10)).codec("e", Expand(10_000)).build().unwrap();
+    let d = Decoder::builder(Limits::new(1 << 30).disable_ratio_limit().max_input(10))
+        .codec("e", Expand(10_000))
+        .build()
+        .unwrap();
     let o = run(&d, &[1u8; 11], &["e"], 1 << 16);
     assert_eq!(o.kind, Some(ErrorKind::InputLimit));
-    let d = Decoder::builder(Limits::new(1 << 30).disable_ratio_limit().max_layers(1)).codec("e", Expand(10_000)).build().unwrap();
+    let d = Decoder::builder(Limits::new(1 << 30).disable_ratio_limit().max_layers(1))
+        .codec("e", Expand(10_000))
+        .build()
+        .unwrap();
     assert_eq!(d.reader(&b""[..], &["e, e"]).unwrap_err().kind(), ErrorKind::LayerLimit);
 }
 
@@ -378,7 +415,11 @@ fn sg_r_inp_01_the_input_limit_is_exact_and_asks_for_one_probe_byte_at_most() {
             assert_eq!(e.kind(), ErrorKind::InputLimit, "max {max} step {step}");
             assert_eq!((e.layer(), e.limit()), (1, max));
             assert_eq!(bytes.len() as u64, max, "the codec got exactly max_input bytes");
-            assert!(c.largest_request.get() as u64 <= max + 1, "asked for {} for max {max}", c.largest_request.get());
+            assert!(
+                c.largest_request.get() as u64 <= max + 1,
+                "asked for {} for max {max}",
+                c.largest_request.get()
+            );
             assert!(c.bytes.get() as u64 <= max + 1, "got {} for max {max}", c.bytes.get());
             // exactly max bytes in the source is fine
             let source = Chunked::new(vec![3u8; max as usize], step);
@@ -415,7 +456,10 @@ fn sg_r_inp_01_the_cap_applies_to_identity_chains() {
 #[test]
 fn sg_r_inp_01_a_stream_that_fits_is_unaffected_by_what_follows_it() {
     // Covers: SG-R-INP-01
-    let d = Decoder::builder(Limits::new(1 << 30).max_input(10).disable_ratio_limit()).codec("take10", TakeN(10)).build().unwrap();
+    let d = Decoder::builder(Limits::new(1 << 30).max_input(10).disable_ratio_limit())
+        .codec("take10", TakeN(10))
+        .build()
+        .unwrap();
     let source = Chunked::new(vec![8u8; 500], 100);
     let c = source.counters.clone();
     let mut r = d.reader(source, &["take10"]).unwrap();
@@ -424,7 +468,10 @@ fn sg_r_inp_01_a_stream_that_fits_is_unaffected_by_what_follows_it() {
     assert_eq!(bytes, [8u8; 10]);
     assert!(c.bytes.get() <= 11 && c.largest_request.get() <= 11);
     // a codec stream of 10 bytes: take 11 needs the 11th byte -> input_limit
-    let d = Decoder::builder(Limits::new(1 << 30).max_input(10).disable_ratio_limit()).codec("take11", TakeN(11)).build().unwrap();
+    let d = Decoder::builder(Limits::new(1 << 30).max_input(10).disable_ratio_limit())
+        .codec("take11", TakeN(11))
+        .build()
+        .unwrap();
     let o = run(&d, &[8u8; 500], &["take11"], 100);
     assert_eq!((o.kind, o.bytes.len()), (Some(ErrorKind::InputLimit), 10));
 }
@@ -491,7 +538,10 @@ fn sg_r_inp_01_a_codec_cannot_consume_more_than_it_was_shown() {
             Box::new(GreedyReader(input))
         }
     }
-    let d = Decoder::builder(Limits::new(1 << 30).max_input(10).disable_ratio_limit()).codec("greedy", Greedy).build().unwrap();
+    let d = Decoder::builder(Limits::new(1 << 30).max_input(10).disable_ratio_limit())
+        .codec("greedy", Greedy)
+        .build()
+        .unwrap();
     let source = Chunked::new(vec![1u8; 1000], 1000);
     let c = source.counters.clone();
     let mut r = d.reader(source, &["greedy"]).unwrap();

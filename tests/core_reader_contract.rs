@@ -40,13 +40,21 @@ fn sg_r_rdr_01_the_result_does_not_depend_on_read_sizes() {
         ("truncated", truncated, Limits::new(1 << 20).disable_ratio_limit()),
         ("bad trailer", bad_trailer, Limits::new(1 << 20).disable_ratio_limit()),
         ("trailing byte", trailing, Limits::new(1 << 20).disable_ratio_limit()),
-        ("input_limit", good, Limits::new(1 << 20).max_input(5_000).disable_ratio_limit()),
+        (
+            "input_limit",
+            good,
+            Limits::new(1 << 20).max_input(5_000).disable_ratio_limit(),
+        ),
     ];
     for (name, input, limits) in cases {
         let d = decoder(limits);
         let reference = run(&d, &input, &["stored"], SIZES[0]);
         for size in SIZES {
-            assert_eq!(run(&d, &input, &["stored"], size), reference, "{name} with read size {size}");
+            assert_eq!(
+                run(&d, &input, &["stored"], size),
+                reference,
+                "{name} with read size {size}"
+            );
         }
         // mixed sizes
         let mut rng = Rng(0x1234_5678_9abc_def1);
@@ -329,10 +337,13 @@ impl Codec for DropProbe {
 fn sg_i_10_nothing_outlives_close() {
     // Covers: SG-I-10 SG-R-RDR-06
     let token = Arc::new(());
-    let d = Decoder::builder(loose()).codec("probe", DropProbe(token.clone())).build().unwrap();
+    let d = Decoder::builder(loose())
+        .codec("probe", DropProbe(token.clone()))
+        .build()
+        .unwrap();
     assert_eq!(Arc::strong_count(&token), 2); // the decoder holds the factory
     let source_token = Rc::new(());
-    struct Held(Rc<()>, &'static [u8]);
+    struct Held(#[allow(dead_code)] Rc<()>, &'static [u8]);
     impl Read for Held {
         fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             let n = buf.len().min(self.1.len());
@@ -341,11 +352,13 @@ fn sg_i_10_nothing_outlives_close() {
             Ok(n)
         }
     }
-    let mut r = d.reader(Held(source_token.clone(), b"hello"), &["probe, probe"]).unwrap();
+    let mut r = d
+        .reader(Held(source_token.clone(), b"hello"), &["probe, probe"])
+        .unwrap();
     assert_eq!(Arc::strong_count(&token), 4); // two codec readers
     assert_eq!(Rc::strong_count(&source_token), 2);
     let mut buf = [0u8; 2];
-    r.read(&mut buf).unwrap();
+    assert!(r.read(&mut buf).unwrap() > 0);
     r.close();
     assert_eq!(Arc::strong_count(&token), 2, "codec readers are released by close");
     assert_eq!(Rc::strong_count(&source_token), 1, "the source is released by close");
@@ -356,12 +369,17 @@ fn sg_i_10_nothing_outlives_close() {
     drop(r);
     assert_eq!(Arc::strong_count(&token), 2);
     // a failed construction releases everything
-    let e = d.reader(Held(source_token.clone(), b"hello"), &["probe, nope"]).unwrap_err();
+    let e = d
+        .reader(Held(source_token.clone(), b"hello"), &["probe, nope"])
+        .unwrap_err();
     assert_eq!(e.kind(), ErrorKind::UnsupportedEncoding);
     assert_eq!(Rc::strong_count(&source_token), 1);
     assert_eq!(Arc::strong_count(&token), 2);
     // a terminal error does not need close to be harmless, and close afterwards is fine
-    let d2 = Decoder::builder(Limits::new(1).disable_ratio_limit()).codec("probe", DropProbe(token.clone())).build().unwrap();
+    let d2 = Decoder::builder(Limits::new(1).disable_ratio_limit())
+        .codec("probe", DropProbe(token.clone()))
+        .build()
+        .unwrap();
     let mut r = d2.reader(Held(source_token.clone(), b"hello"), &["probe"]).unwrap();
     let mut out = Vec::new();
     assert!(r.read_to_end(&mut out).is_err());
@@ -395,7 +413,14 @@ fn sg_r_rdr_07_distinct_readers_are_independent() {
 fn sg_r_rdr_05_a_source_error_is_source_error_with_the_cause() {
     // Covers: SG-R-RDR-05 SG-R-LAY-05
     let d = decoder(loose());
-    for header in [vec![], vec!["pass"], vec!["stored"], vec!["bytes"], vec!["pass, stored"], vec!["stored, pass, pass"]] {
+    for header in [
+        vec![],
+        vec!["pass"],
+        vec!["stored"],
+        vec!["bytes"],
+        vec!["pass, stored"],
+        vec!["stored, pass, pass"],
+    ] {
         let source = FailAfter::new(stored(&payload(100), 10)[..30].to_vec(), || {
             io::Error::new(io::ErrorKind::ConnectionReset, "the socket exploded")
         });
@@ -455,7 +480,13 @@ fn sg_r_cdc_06_a_source_that_ends_early_is_corrupt_not_source_error() {
     }
     assert_eq!(run(&d, &full, &["stored"], 64).kind, None);
     // an empty source is a clean end for identity and truncation for a codec
-    assert_eq!(run(&d, b"", &[], 8), Outcome { bytes: vec![], kind: None });
+    assert_eq!(
+        run(&d, b"", &[], 8),
+        Outcome {
+            bytes: vec![],
+            kind: None
+        }
+    );
     assert_eq!(run(&d, b"", &["stored"], 8).kind, Some(ErrorKind::Corrupt));
 }
 
@@ -477,7 +508,11 @@ fn sg_r_rdr_03_a_source_that_makes_no_progress_is_internal() {
         for _ in 0..5 {
             assert_eq!(kind_of(&r.read(&mut buf).unwrap_err()), ErrorKind::Internal);
         }
-        assert_eq!(calls.get(), after, "no further reads after the terminal error (SG-R-LAY-09)");
+        assert_eq!(
+            calls.get(),
+            after,
+            "no further reads after the terminal error (SG-R-LAY-09)"
+        );
     }
 }
 
@@ -541,7 +576,9 @@ fn interrupted_reads_of_the_source_are_retried() {
     // Covers: SG-R-RDR-01 SG-R-RDR-05
     let d = decoder(loose());
     let data = payload(9000);
-    let mut r = d.reader(Interrupted::new(Chunked::new(stored(&data, 300), 700), 3), &["stored"]).unwrap();
+    let mut r = d
+        .reader(Interrupted::new(Chunked::new(stored(&data, 300), 700), 3), &["stored"])
+        .unwrap();
     let mut out = Vec::new();
     r.read_to_end(&mut out).unwrap();
     assert_eq!(out, data);
@@ -592,14 +629,14 @@ fn sg_r_lay_09_sg_r_rat_02_look_ahead_is_bounded() {
     let c = source.counters.clone();
     let mut r = d.reader(source, &["pass"]).unwrap();
     let mut buf = [0u8; 1];
-    r.read(&mut buf).unwrap();
+    assert!(r.read(&mut buf).unwrap() > 0);
     assert!(c.bytes.get() <= 64 * 1024, "fetched {} bytes for one", c.bytes.get());
     assert!(c.largest_request.get() <= 4096, "asked for {}", c.largest_request.get());
     // with a chain, still bounded
     let source = Chunked::new(vec![1u8; 10 << 20], 1 << 20);
     let c = source.counters.clone();
     let mut r = d.reader(source, &["pass, pass, pass"]).unwrap();
-    r.read(&mut buf).unwrap();
+    assert!(r.read(&mut buf).unwrap() > 0);
     assert!(c.bytes.get() <= 64 * 1024, "fetched {} bytes for one", c.bytes.get());
 }
 
@@ -610,7 +647,10 @@ fn sg_r_api_05_failures_carry_kind_layer_and_limit() {
     let mut r = d.reader(&[0u8; 100][..], &["pass"]).unwrap();
     let e = r.read_to_end(&mut Vec::new()).unwrap_err();
     let typed = Error::from_io(&e).unwrap();
-    assert_eq!((typed.kind(), typed.layer(), typed.limit()), (ErrorKind::OutputLimit, 1, 50));
+    assert_eq!(
+        (typed.kind(), typed.layer(), typed.limit()),
+        (ErrorKind::OutputLimit, 1, 50)
+    );
     assert!(typed.to_string().contains("output_limit"));
     assert_eq!(e.kind(), io::ErrorKind::Other);
     let d = decoder(loose());
@@ -630,14 +670,21 @@ fn sg_r_lay_06_decode_all_returns_no_data_on_error_but_streams_deliver_a_prefix(
     let n = bad.len();
     bad[n - 1] = b'X';
     let d = decoder(loose());
-    assert_eq!(d.decode_all(&bad[..], &["stored"]).unwrap_err().kind(), ErrorKind::Corrupt);
+    assert_eq!(
+        d.decode_all(&bad[..], &["stored"]).unwrap_err().kind(),
+        ErrorKind::Corrupt
+    );
     let mut r = d.reader(&bad[..], &["stored"]).unwrap();
     let mut out = Vec::new();
     let e = r.read_to_end(&mut out).unwrap_err();
     assert_eq!(kind_of(&e), ErrorKind::Corrupt);
     assert_eq!(out, data, "all bytes were produced before the trailer was judged");
     // spillgate::decode_all, the free function
-    let out = spillgate::decode_all(&data[..], &["gzip", "identity"], Limits::new(5000).disable_ratio_limit());
+    let out = spillgate::decode_all(
+        &data[..],
+        &["gzip", "identity"],
+        Limits::new(5000).disable_ratio_limit(),
+    );
     assert_eq!(out.unwrap_err().kind(), ErrorKind::Corrupt, "not gzip data");
     let out = spillgate::decode_all(&data[..], &[], Limits::new(5000).disable_ratio_limit());
     assert_eq!(out.unwrap(), data);
