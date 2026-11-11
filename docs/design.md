@@ -2,8 +2,8 @@
 
 This is the contract between the parts of the port. The specification (`spec/SPEC.md`) and the
 conformance corpus (`conformance/`) are normative. The closest model for every part is the
-TypeScript port in `D:\Claude\spillgate-js\packages\core\src` (and its tests in
-`packages\core\tests`); the Go reference is `D:\Claude\spillgate`. Port the **semantics and the
+TypeScript port in `packages/core/src` of FelixMiddelhoff/spillgate-js (and its tests in
+`packages/core/tests`); the Go reference is FelixMiddelhoff/spillgate. Port the **semantics and the
 tests**, not the async structure: Rust is synchronous and pull based (`std::io::Read`).
 
 ## Principles
