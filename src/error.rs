@@ -13,6 +13,9 @@ use std::io;
 pub enum ErrorKind {
     /// A limit parameter is missing, out of range or contradicts another one.
     InvalidLimits,
+    /// A decoder option is invalid: an extension codec name is ill-formed, reserved or taken
+    /// (SG-R-CDC-09).
+    InvalidOption,
     /// A layer would have produced more than `max_output` bytes.
     OutputLimit,
     /// A layer (or the whole chain) expanded its input by more than `max_ratio`.
@@ -42,6 +45,7 @@ impl ErrorKind {
     pub fn as_str(self) -> &'static str {
         match self {
             ErrorKind::InvalidLimits => "invalid_limits",
+            ErrorKind::InvalidOption => "invalid_option",
             ErrorKind::OutputLimit => "output_limit",
             ErrorKind::RatioLimit => "ratio_limit",
             ErrorKind::LayerLimit => "layer_limit",
@@ -66,7 +70,7 @@ impl ErrorKind {
             ErrorKind::UnsupportedEncoding => 415,
             ErrorKind::MalformedEncoding | ErrorKind::Corrupt | ErrorKind::SourceError => 400,
             ErrorKind::MemoryLimit | ErrorKind::Canceled => 503,
-            ErrorKind::InvalidLimits | ErrorKind::Internal => 500,
+            ErrorKind::InvalidLimits | ErrorKind::InvalidOption | ErrorKind::Internal => 500,
         }
     }
 }
@@ -90,7 +94,13 @@ pub struct Error {
 impl Error {
     /// A new error of `kind` with a message. The message must not contain unquoted untrusted data.
     pub fn new(kind: ErrorKind, message: impl Into<String>) -> Error {
-        Error { kind, message: message.into(), layer: 0, limit: 0, cause: None }
+        Error {
+            kind,
+            message: message.into(),
+            layer: 0,
+            limit: 0,
+            cause: None,
+        }
     }
 
     /// The error for a stream that is invalid or truncated.
@@ -100,7 +110,13 @@ impl Error {
 
     /// The error for a source failure; `cause` is returned by `source()`.
     pub fn source_error(cause: io::Error) -> Error {
-        Error { kind: ErrorKind::SourceError, message: "the source failed".into(), layer: 0, limit: 0, cause: Some(cause) }
+        Error {
+            kind: ErrorKind::SourceError,
+            message: "the source failed".into(),
+            layer: 0,
+            limit: 0,
+            cause: Some(cause),
+        }
     }
 
     /// Attach the limit that was exceeded.
