@@ -7,3 +7,6 @@ description = "Corpus generators for the spillgate conformance tests (no compres
 
 [dependencies]
 sha2 = "0.10"
+
+[dev-dependencies]
+serde_json = "1"
