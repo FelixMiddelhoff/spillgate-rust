@@ -27,6 +27,8 @@ pub(crate) const MAX_EMPTY_READS: u32 = 100;
 #[derive(Debug, Default)]
 struct MeterState {
     consumed: Cell<u64>,
+    /// The input cap of this meter, 0 for none.
+    max_input: Cell<u64>,
     failure: RefCell<Option<Error>>,
 }
 
@@ -40,11 +42,27 @@ impl MeterHandle {
         self.0.consumed.get()
     }
 
+    /// SG-R-INP-01: `Some` once the codec has *taken* (consumed) the `max_input + 1`-th byte. Looking
+    /// at that byte through `fill_buf` is not taking it. The layer guard asks this at the end of
+    /// every codec step.
+    pub(crate) fn limit_violation(&self) -> Option<Error> {
+        let max = self.0.max_input.get();
+        (max > 0 && self.0.consumed.get() > max).then(|| input_limit_error(max))
+    }
+
     /// The terminal error the meter raised, if any: a source failure, the input limit, a lower
     /// layer's error.
     pub(crate) fn failure(&self) -> Option<Error> {
         self.0.failure.borrow().as_ref().map(Error::duplicate)
     }
+}
+
+fn input_limit_error(max_input: u64) -> Error {
+    Error::new(
+        ErrorKind::InputLimit,
+        format!("the stream needs more than {max_input} input bytes"),
+    )
+    .with_limit(max_input)
 }
 
 /// Counts and guards the input of one layer.
@@ -58,6 +76,8 @@ pub(crate) struct InputMeter<R> {
     fetched: u64,
     max_input: u64,
     layer: usize,
+    /// Never show the probe byte (identity layers: taking is passing). A codec's view is not strict.
+    strict: bool,
     ended: bool,
     state: MeterHandle,
     cancel: Option<crate::cancel::CancelToken>,
@@ -66,6 +86,8 @@ pub(crate) struct InputMeter<R> {
 impl<R: Read> InputMeter<R> {
     /// `max_input` 0 means no cap. `layer` is the 1-based index used on errors.
     pub(crate) fn new(source: R, max_input: u64, layer: usize) -> InputMeter<R> {
+        let state = MeterHandle::default();
+        state.0.max_input.set(max_input);
         InputMeter {
             source,
             buf: vec![0; BUFFER_SIZE],
@@ -75,8 +97,9 @@ impl<R: Read> InputMeter<R> {
             fetched: 0,
             max_input,
             layer,
+            strict: false,
             ended: false,
-            state: MeterHandle::default(),
+            state,
             cancel: None,
         }
     }
@@ -84,6 +107,13 @@ impl<R: Read> InputMeter<R> {
     /// Fail every later fetch once `token` is canceled (SG-R-API-04).
     pub(crate) fn with_cancel(mut self, token: Option<crate::cancel::CancelToken>) -> InputMeter<R> {
         self.cancel = token;
+        self
+    }
+
+    /// The strict view for identity layers: the probe byte is never shown, so a byte beyond the cap
+    /// is `input_limit` after exactly `max_input` bytes were passed on.
+    pub(crate) fn strict(mut self, strict: bool) -> InputMeter<R> {
+        self.strict = strict;
         self
     }
 
@@ -98,11 +128,7 @@ impl<R: Read> InputMeter<R> {
     }
 
     fn input_limit(&self) -> Error {
-        Error::new(
-            ErrorKind::InputLimit,
-            format!("the stream needs more than {} input bytes", self.max_input),
-        )
-        .with_limit(self.max_input)
+        input_limit_error(self.max_input)
     }
 
     /// How much to ask the source for: with a cap never beyond `max_input + 1` bytes in total.
@@ -196,12 +222,21 @@ impl<R: Read> BufRead for InputMeter<R> {
         if self.max_input > 0 && self.pos < self.filled {
             let allowance = self.max_input.saturating_sub(self.state.consumed());
             if allowance == 0 {
-                // The probe byte exists: a MaxInput+1-th byte is being taken (SG-R-INP-01).
-                let error = self.input_limit();
-                return Err(self.fail(error));
+                if self.strict {
+                    // The probe byte exists and would be passed on: a MaxInput+1-th byte is being
+                    // taken (SG-R-INP-01).
+                    let error = self.input_limit();
+                    return Err(self.fail(error));
+                }
+                // A codec may look at the probe, which is then shown alone (the fetch size keeps
+                // the total at max_input + 1, SG-R-INP-02). Showing it is not a violation; consuming
+                // it is, which the layer guard checks at the end of every codec step (SG-R-INP-01).
+            } else {
+                // The probe never comes together with the bytes before it: a codec that works on
+                // the whole view is not charged for a byte it did not get to use.
+                let allowance = usize::try_from(allowance).unwrap_or(usize::MAX);
+                end = end.min(self.pos.saturating_add(allowance));
             }
-            let allowance = usize::try_from(allowance).unwrap_or(usize::MAX);
-            end = end.min(self.pos.saturating_add(allowance));
         }
         self.visible = end;
         Ok(self.buf.get(self.pos..end).unwrap_or(&[]))
@@ -215,5 +250,63 @@ impl<R: Read> BufRead for InputMeter<R> {
         self.pos += amount;
         let consumed = self.state.0.consumed.get().saturating_add(amount as u64);
         self.state.0.consumed.set(consumed);
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+mod tests {
+    use super::*;
+
+    fn view(m: &mut InputMeter<&[u8]>) -> Vec<u8> {
+        m.fill_buf().unwrap().to_vec()
+    }
+
+    // Covers: SG-R-INP-01 SG-R-INP-02
+    #[test]
+    fn a_codec_view_shows_the_probe_alone_and_only_consuming_it_counts() {
+        let data = [9u8; 50];
+        let mut m = InputMeter::new(&data[..], 4, 1);
+        let handle = m.handle();
+        assert_eq!(
+            view(&mut m).len(),
+            4,
+            "the probe does not come together with earlier bytes"
+        );
+        m.consume(4);
+        assert!(handle.limit_violation().is_none());
+        assert_eq!(view(&mut m).len(), 1, "the probe is shown alone");
+        assert!(handle.limit_violation().is_none(), "looking is not taking");
+        m.consume(0);
+        assert!(handle.limit_violation().is_none());
+        m.consume(1);
+        assert_eq!(handle.consumed(), 5);
+        assert_eq!(handle.limit_violation().unwrap().kind(), ErrorKind::InputLimit);
+        let e = m.fill_buf().unwrap_err();
+        assert_eq!(Error::from_io(&e).unwrap().kind(), ErrorKind::InputLimit);
+        assert_eq!(m.fetched, 5, "never more than max_input + 1 from the source");
+    }
+
+    // Covers: SG-R-INP-01
+    #[test]
+    fn the_strict_view_of_identity_never_shows_the_probe() {
+        let data = [9u8; 50];
+        let mut m = InputMeter::new(&data[..], 4, 1).strict(true);
+        assert_eq!(view(&mut m).len(), 4);
+        m.consume(4);
+        let e = m.fill_buf().unwrap_err();
+        assert_eq!(Error::from_io(&e).unwrap().kind(), ErrorKind::InputLimit);
+        assert_eq!(m.handle().consumed(), 4);
+    }
+
+    // Covers: SG-R-INP-01
+    #[test]
+    fn a_source_ending_at_the_cap_is_the_end_of_input() {
+        let data = [9u8; 4];
+        let mut m = InputMeter::new(&data[..], 4, 1);
+        let n = view(&mut m).len();
+        m.consume(n);
+        assert!(m.fill_buf().unwrap().is_empty());
+        assert!(m.handle().limit_violation().is_none());
     }
 }

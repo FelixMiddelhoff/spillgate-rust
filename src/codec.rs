@@ -12,6 +12,10 @@
 //! - It takes compressed input only from the `input` it was given, through `fill_buf`/`consume`.
 //!   The number of bytes it *consumes* is what the ratio meter counts (SG-R-RAT-02), so a codec
 //!   consumes only what it has used. It never calls `consume` with more than `fill_buf` returned.
+//! - With `max_input` set, `fill_buf` may show the byte after the limit (the probe), alone. Looking
+//!   at it is free; consuming it is `input_limit`, checked after every `read`, whatever `read`
+//!   returned. A codec that finds trailing data after a complete stream peeks with `fill_buf`,
+//!   reports `Error::corrupt` and does not consume it (SG-R-INP-01).
 //! - An `Ok(0)` from `fill_buf` is the end of the input. A stream that ends before its end marker
 //!   or trailer is [`Error::corrupt`] (SG-R-CDC-06), never a clean end.
 //! - An `io::Error` from the input is passed through [`Error::from_input`].

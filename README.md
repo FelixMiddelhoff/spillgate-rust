@@ -58,7 +58,7 @@ how-to, section 3.8. Minimum supported Rust version: 1.85. `unsafe` is forbidden
 | `max_layers` | non-identity encodings in a chain, 1..=16 | 5 |
 | `max_ratio` | output bytes per consumed input byte | 1000 |
 | `ratio_grace` | output size below which the ratio is not checked | 64 KiB |
-| `max_input` | compressed bytes taken from the source | none |
+| `max_input` | compressed bytes taken from the source (looking at the next byte does not count) | none |
 | `disable_ratio_limit` | the one named opt-out of the ratio check | off |
 
 Memory is bounded whatever the output size: a few hundred KiB per layer, plus the window of brotli

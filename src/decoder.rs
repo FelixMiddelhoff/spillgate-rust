@@ -175,7 +175,10 @@ impl Decoder {
         for index in 1..=count {
             // The input cap applies to the chain's source only (SG-R-INP-01).
             let cap = if index == 1 { self.limits.max_input } else { 0 };
-            let meter = InputMeter::new(current, cap, index).with_cancel(cancel.clone());
+            // Identity takes what it passes, so it gets the strict view; a codec may look at the probe.
+            let meter = InputMeter::new(current, cap, index)
+                .strict(layers.get(index - 1).is_none())
+                .with_cancel(cancel.clone());
             let handle = meter.handle();
             let first_handle = first.get_or_insert_with(|| handle.clone()).clone();
             let input: Box<dyn std::io::BufRead + 'a> = Box::new(meter);

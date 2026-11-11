@@ -126,6 +126,13 @@ If the compressed size is not already bounded by your web server, framework or b
 `max_input`. spillgate bounds the output; it is not a substitute for limiting how many bytes you
 accept. Do both.
 
+`max_input` counts the bytes a codec takes, not the bytes it merely looks at. A stream of exactly
+`max_input` bytes is fine even if the source holds more behind it; if there is data behind a
+complete stream the result is `Corrupt` (trailing data), not `InputLimit`. `InputLimit` means the
+decoder needed byte `max_input + 1` to go on. spillgate never asks the source for more than
+`max_input + 1` bytes in total. (SG-R-INP-01, see `docs/porting-inp-probe.md` in the reference
+repository.)
+
 ## 3. Wire it in
 
 Create one `Decoder` at start-up and share it. It is immutable, `Send + Sync`, and holds no

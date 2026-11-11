@@ -120,9 +120,17 @@ impl GzipReader<'_> {
 
     /// Parse a member header; at `NextHeader` the end of the input is a clean end of the stream.
     fn start_member(&mut self) -> Result<(), Error> {
-        if self.phase == Phase::NextHeader && fill(&mut *self.input)?.is_empty() {
-            self.phase = Phase::Finished;
-            return Ok(());
+        if self.phase == Phase::NextHeader {
+            match fill(&mut *self.input)?.first() {
+                None => {
+                    self.phase = Phase::Finished;
+                    return Ok(());
+                }
+                // Cannot start another member: trailing data. The byte was only looked at, it is
+                // not consumed (SG-R-INP-01).
+                Some(&first) if first != ID1 => return Err(Error::corrupt("gzip: invalid header")),
+                Some(_) => {}
+            }
         }
         let mut fixed = [0u8; FIXED_HEADER];
         read_exact(&mut *self.input, &mut fixed, "gzip header")?;
@@ -304,4 +312,49 @@ pub(crate) fn crc32(data: &[u8], previous: u32) -> u32 {
         c = CRC_TABLES[0][((c ^ u32::from(b)) & 0xff) as usize] ^ (c >> 8);
     }
     !c
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+mod probe_tests {
+    use super::*;
+    use crate::deflate::DeflateCodec;
+    use crate::error::ErrorKind;
+
+    /// An empty gzip member.
+    const GZIP: [u8; 20] = [0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 255, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    /// An empty zlib stream.
+    const ZLIB: [u8; 8] = [0x78, 0x9c, 3, 0, 0, 0, 0, 1];
+
+    fn run(codec: &dyn Codec, stream: &[u8]) -> (Result<usize, Error>, usize) {
+        let mut rest = stream;
+        let result = {
+            let mut reader = codec.new_reader(Box::new(&mut rest));
+            reader.read(&mut [0u8; 16])
+        };
+        (result, rest.len())
+    }
+
+    // Covers: SG-R-INP-01 SG-R-CDC-02 SG-R-CDC-03
+    #[test]
+    fn trailing_data_is_reported_without_consuming_its_first_byte() {
+        let mut input = GZIP.to_vec();
+        input.extend_from_slice(&[0, 1, 2]);
+        let (result, left) = run(&GzipCodec, &input);
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::Corrupt);
+        assert_eq!(left, 3, "the trailing bytes are all still there");
+
+        let mut input = ZLIB.to_vec();
+        input.extend_from_slice(&[0, 1, 2]);
+        let (result, left) = run(&DeflateCodec::new(false), &input);
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::Corrupt);
+        assert_eq!(left, 3);
+
+        // a byte that could start another member is taken as such
+        let mut input = GZIP.to_vec();
+        input.push(0x1f);
+        let (result, left) = run(&GzipCodec, &input);
+        assert_eq!(result.unwrap_err().kind(), ErrorKind::Corrupt);
+        assert_eq!(left, 0);
+    }
 }

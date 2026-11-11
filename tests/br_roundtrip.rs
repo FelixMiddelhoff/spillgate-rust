@@ -149,12 +149,12 @@ fn max_input_boundary() {
     // the same with a source that trickles one byte at a time
     let d = decoder(Limits::new(1 << 30).disable_ratio_limit().max_input(n), 24);
     assert_eq!(run_with(&d, &stream, &["br"], 4096, 1).kind, None);
-    // a stream with one trailing byte and max_input = stream length: the probe byte is the limit,
-    // not a clean end
+    // a stream with one trailing byte and max_input = stream length: the probe byte is only looked
+    // at, so trailing data is corrupt, not input_limit (SG-R-INP-01)
     let mut plus = stream.clone();
     plus.push(0);
     let o = run(&plus, Limits::new(1 << 30).disable_ratio_limit().max_input(n));
-    assert_eq!(o.kind, Some(ErrorKind::InputLimit));
+    assert_eq!(o.kind, Some(ErrorKind::Corrupt));
 }
 
 #[test]

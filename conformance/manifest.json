@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "corpus_version": "0.1.0",
+  "corpus_version": "0.2.0",
   "vectors": [
     {
       "id": "SG-V-BND-0001",
@@ -1483,6 +1483,562 @@
         "outcome": "ok",
         "length": 25801,
         "sha256": "6a1930dc547fcd4a9aed7a1a9ec0865764825f882eb7883be766ffb895ae8e78"
+      }
+    },
+    {
+      "id": "SG-V-BND-0041",
+      "description": "gzip stream of 323 bytes plus one trailing zero byte, MaxInput 323 = stream size: the codec only looks at the byte beyond the limit, so the result is corrupt (trailing data), not input_limit",
+      "rules": [
+        "SG-R-INP-01",
+        "SG-R-INP-02",
+        "SG-R-CDC-02"
+      ],
+      "tags": [
+        "boundary",
+        "input-limit",
+        "trailing"
+      ],
+      "tier": "small",
+      "encodings": [
+        "gzip"
+      ],
+      "input": {
+        "file": "vectors/small/SG-V-BND-0041.bin",
+        "sha256": "3de7121e53d15a6af5c1500704b284b1f72e84e69898a9be577f123bd87d896f"
+      },
+      "limits": {
+        "max_input": 323,
+        "max_output": 1073741824,
+        "max_ratio": "none"
+      },
+      "expect": {
+        "outcome": "corrupt",
+        "phase": "read",
+        "layer": 1
+      }
+    },
+    {
+      "id": "SG-V-BND-0042",
+      "description": "gzip stream of 323 bytes plus one trailing zero byte, MaxInput 324 = stream size + 1 (control): corrupt (trailing data)",
+      "rules": [
+        "SG-R-INP-01",
+        "SG-R-INP-02",
+        "SG-R-CDC-02"
+      ],
+      "tags": [
+        "boundary",
+        "input-limit",
+        "trailing"
+      ],
+      "tier": "small",
+      "encodings": [
+        "gzip"
+      ],
+      "input": {
+        "file": "vectors/small/SG-V-BND-0042.bin",
+        "sha256": "3de7121e53d15a6af5c1500704b284b1f72e84e69898a9be577f123bd87d896f"
+      },
+      "limits": {
+        "max_input": 324,
+        "max_output": 1073741824,
+        "max_ratio": "none"
+      },
+      "expect": {
+        "outcome": "corrupt",
+        "phase": "read",
+        "layer": 1
+      }
+    },
+    {
+      "id": "SG-V-BND-0043",
+      "description": "gzip stream of 323 bytes plus 1000 trailing zero bytes, MaxInput 323 = stream size: corrupt (trailing data); the source is asked for no more than MaxInput+1 bytes",
+      "rules": [
+        "SG-R-INP-01",
+        "SG-R-INP-02",
+        "SG-R-CDC-02"
+      ],
+      "tags": [
+        "boundary",
+        "input-limit",
+        "trailing"
+      ],
+      "tier": "small",
+      "encodings": [
+        "gzip"
+      ],
+      "input": {
+        "file": "vectors/small/SG-V-BND-0043.bin",
+        "sha256": "fc7cd93e7f8142502642341118784033f9540fde4263dcf3c102b0c6694854da"
+      },
+      "limits": {
+        "max_input": 323,
+        "max_output": 1073741824,
+        "max_ratio": "none"
+      },
+      "expect": {
+        "outcome": "corrupt",
+        "phase": "read",
+        "layer": 1
+      }
+    },
+    {
+      "id": "SG-V-BND-0044",
+      "description": "zlib stream of 311 bytes plus one trailing zero byte, MaxInput 311 = stream size: the codec only looks at the byte beyond the limit, so the result is corrupt (trailing data), not input_limit",
+      "rules": [
+        "SG-R-INP-01",
+        "SG-R-INP-02",
+        "SG-R-CDC-03"
+      ],
+      "tags": [
+        "boundary",
+        "input-limit",
+        "trailing"
+      ],
+      "tier": "small",
+      "encodings": [
+        "deflate"
+      ],
+      "input": {
+        "file": "vectors/small/SG-V-BND-0044.bin",
+        "sha256": "a83a8c6d8885ba10c444f4d7d6adda6db3765ff6466ceee1737b5a6975dab136"
+      },
+      "limits": {
+        "max_input": 311,
+        "max_output": 1073741824,
+        "max_ratio": "none"
+      },
+      "expect": {
+        "outcome": "corrupt",
+        "phase": "read",
+        "layer": 1
+      }
+    },
+    {
+      "id": "SG-V-BND-0045",
+      "description": "zlib stream of 311 bytes plus one trailing zero byte, MaxInput 312 = stream size + 1 (control): corrupt (trailing data)",
+      "rules": [
+        "SG-R-INP-01",
+        "SG-R-INP-02",
+        "SG-R-CDC-03"
+      ],
+      "tags": [
+        "boundary",
+        "input-limit",
+        "trailing"
+      ],
+      "tier": "small",
+      "encodings": [
+        "deflate"
+      ],
+      "input": {
+        "file": "vectors/small/SG-V-BND-0045.bin",
+        "sha256": "a83a8c6d8885ba10c444f4d7d6adda6db3765ff6466ceee1737b5a6975dab136"
+      },
+      "limits": {
+        "max_input": 312,
+        "max_output": 1073741824,
+        "max_ratio": "none"
+      },
+      "expect": {
+        "outcome": "corrupt",
+        "phase": "read",
+        "layer": 1
+      }
+    },
+    {
+      "id": "SG-V-BND-0046",
+      "description": "zlib stream of 311 bytes plus 1000 trailing zero bytes, MaxInput 311 = stream size: corrupt (trailing data); the source is asked for no more than MaxInput+1 bytes",
+      "rules": [
+        "SG-R-INP-01",
+        "SG-R-INP-02",
+        "SG-R-CDC-03"
+      ],
+      "tags": [
+        "boundary",
+        "input-limit",
+        "trailing"
+      ],
+      "tier": "small",
+      "encodings": [
+        "deflate"
+      ],
+      "input": {
+        "file": "vectors/small/SG-V-BND-0046.bin",
+        "sha256": "1d5d6581cd380413975eea2ce5c1607617fb566a4c4906dd44a2c592221b5bad"
+      },
+      "limits": {
+        "max_input": 311,
+        "max_output": 1073741824,
+        "max_ratio": "none"
+      },
+      "expect": {
+        "outcome": "corrupt",
+        "phase": "read",
+        "layer": 1
+      }
+    },
+    {
+      "id": "SG-V-BND-0047",
+      "description": "raw deflate stream of 305 bytes plus one trailing zero byte, MaxInput 305 = stream size: the codec only looks at the byte beyond the limit, so the result is corrupt (trailing data), not input_limit",
+      "rules": [
+        "SG-R-INP-01",
+        "SG-R-INP-02",
+        "SG-R-CDC-03"
+      ],
+      "tags": [
+        "boundary",
+        "input-limit",
+        "trailing"
+      ],
+      "tier": "small",
+      "encodings": [
+        "deflate"
+      ],
+      "input": {
+        "file": "vectors/small/SG-V-BND-0047.bin",
+        "sha256": "65d2ff5246039e1844d50516f5ad7b4959a0cc3c35e0a1fc6ce0a92377d5bfd7"
+      },
+      "limits": {
+        "max_input": 305,
+        "max_output": 1073741824,
+        "max_ratio": "none"
+      },
+      "expect": {
+        "outcome": "corrupt",
+        "phase": "read",
+        "layer": 1
+      }
+    },
+    {
+      "id": "SG-V-BND-0048",
+      "description": "raw deflate stream of 305 bytes plus one trailing zero byte, MaxInput 306 = stream size + 1 (control): corrupt (trailing data)",
+      "rules": [
+        "SG-R-INP-01",
+        "SG-R-INP-02",
+        "SG-R-CDC-03"
+      ],
+      "tags": [
+        "boundary",
+        "input-limit",
+        "trailing"
+      ],
+      "tier": "small",
+      "encodings": [
+        "deflate"
+      ],
+      "input": {
+        "file": "vectors/small/SG-V-BND-0048.bin",
+        "sha256": "65d2ff5246039e1844d50516f5ad7b4959a0cc3c35e0a1fc6ce0a92377d5bfd7"
+      },
+      "limits": {
+        "max_input": 306,
+        "max_output": 1073741824,
+        "max_ratio": "none"
+      },
+      "expect": {
+        "outcome": "corrupt",
+        "phase": "read",
+        "layer": 1
+      }
+    },
+    {
+      "id": "SG-V-BND-0049",
+      "description": "raw deflate stream of 305 bytes plus 1000 trailing zero bytes, MaxInput 305 = stream size: corrupt (trailing data); the source is asked for no more than MaxInput+1 bytes",
+      "rules": [
+        "SG-R-INP-01",
+        "SG-R-INP-02",
+        "SG-R-CDC-03"
+      ],
+      "tags": [
+        "boundary",
+        "input-limit",
+        "trailing"
+      ],
+      "tier": "small",
+      "encodings": [
+        "deflate"
+      ],
+      "input": {
+        "file": "vectors/small/SG-V-BND-0049.bin",
+        "sha256": "ca03cef609c2a7cd95669bc1883260c4771a8dc96abd8ff81bc8af7824d68149"
+      },
+      "limits": {
+        "max_input": 305,
+        "max_output": 1073741824,
+        "max_ratio": "none"
+      },
+      "expect": {
+        "outcome": "corrupt",
+        "phase": "read",
+        "layer": 1
+      }
+    },
+    {
+      "id": "SG-V-BND-0050",
+      "description": "brotli stream of 304 bytes plus one trailing zero byte, MaxInput 304 = stream size: the codec only looks at the byte beyond the limit, so the result is corrupt (trailing data), not input_limit",
+      "rules": [
+        "SG-R-INP-01",
+        "SG-R-INP-02",
+        "SG-R-CDC-04"
+      ],
+      "tags": [
+        "boundary",
+        "input-limit",
+        "trailing",
+        "brotli",
+        "needs-br"
+      ],
+      "tier": "small",
+      "encodings": [
+        "br"
+      ],
+      "input": {
+        "file": "vectors/small/SG-V-BND-0050.bin",
+        "sha256": "87ef6e0e378d61f8ffe1857311abbf3842fb930974a55689392dc7068940ef21"
+      },
+      "limits": {
+        "max_input": 304,
+        "max_output": 1073741824,
+        "max_ratio": "none"
+      },
+      "expect": {
+        "outcome": "corrupt",
+        "phase": "read",
+        "layer": 1
+      }
+    },
+    {
+      "id": "SG-V-BND-0051",
+      "description": "brotli stream of 304 bytes plus one trailing zero byte, MaxInput 305 = stream size + 1 (control): corrupt (trailing data)",
+      "rules": [
+        "SG-R-INP-01",
+        "SG-R-INP-02",
+        "SG-R-CDC-04"
+      ],
+      "tags": [
+        "boundary",
+        "input-limit",
+        "trailing",
+        "brotli",
+        "needs-br"
+      ],
+      "tier": "small",
+      "encodings": [
+        "br"
+      ],
+      "input": {
+        "file": "vectors/small/SG-V-BND-0051.bin",
+        "sha256": "87ef6e0e378d61f8ffe1857311abbf3842fb930974a55689392dc7068940ef21"
+      },
+      "limits": {
+        "max_input": 305,
+        "max_output": 1073741824,
+        "max_ratio": "none"
+      },
+      "expect": {
+        "outcome": "corrupt",
+        "phase": "read",
+        "layer": 1
+      }
+    },
+    {
+      "id": "SG-V-BND-0052",
+      "description": "brotli stream of 304 bytes plus 1000 trailing zero bytes, MaxInput 304 = stream size: corrupt (trailing data); the source is asked for no more than MaxInput+1 bytes",
+      "rules": [
+        "SG-R-INP-01",
+        "SG-R-INP-02",
+        "SG-R-CDC-04"
+      ],
+      "tags": [
+        "boundary",
+        "input-limit",
+        "trailing",
+        "brotli",
+        "needs-br"
+      ],
+      "tier": "small",
+      "encodings": [
+        "br"
+      ],
+      "input": {
+        "file": "vectors/small/SG-V-BND-0052.bin",
+        "sha256": "da5faab9e8238ff90bd94d20cec0f9be997cd49464d828acef6c57ad90dde61a"
+      },
+      "limits": {
+        "max_input": 304,
+        "max_output": 1073741824,
+        "max_ratio": "none"
+      },
+      "expect": {
+        "outcome": "corrupt",
+        "phase": "read",
+        "layer": 1
+      }
+    },
+    {
+      "id": "SG-V-BND-0053",
+      "description": "zstd stream of 309 bytes plus one trailing zero byte, MaxInput 309 = stream size: the codec only looks at the byte beyond the limit, so the result is corrupt (trailing data), not input_limit",
+      "rules": [
+        "SG-R-INP-01",
+        "SG-R-INP-02",
+        "SG-R-CDC-05"
+      ],
+      "tags": [
+        "boundary",
+        "input-limit",
+        "trailing",
+        "zstd",
+        "needs-zstd"
+      ],
+      "tier": "small",
+      "encodings": [
+        "zstd"
+      ],
+      "input": {
+        "file": "vectors/small/SG-V-BND-0053.bin",
+        "sha256": "611d0939b66541d04f9b17be5e2efcd9f11cf5aba447e90e3d6b413fd1f8874e"
+      },
+      "limits": {
+        "max_input": 309,
+        "max_output": 1073741824,
+        "max_ratio": "none"
+      },
+      "expect": {
+        "outcome": "corrupt",
+        "phase": "read",
+        "layer": 1
+      }
+    },
+    {
+      "id": "SG-V-BND-0054",
+      "description": "zstd stream of 309 bytes plus one trailing zero byte, MaxInput 310 = stream size + 1 (control): corrupt (trailing data)",
+      "rules": [
+        "SG-R-INP-01",
+        "SG-R-INP-02",
+        "SG-R-CDC-05"
+      ],
+      "tags": [
+        "boundary",
+        "input-limit",
+        "trailing",
+        "zstd",
+        "needs-zstd"
+      ],
+      "tier": "small",
+      "encodings": [
+        "zstd"
+      ],
+      "input": {
+        "file": "vectors/small/SG-V-BND-0054.bin",
+        "sha256": "611d0939b66541d04f9b17be5e2efcd9f11cf5aba447e90e3d6b413fd1f8874e"
+      },
+      "limits": {
+        "max_input": 310,
+        "max_output": 1073741824,
+        "max_ratio": "none"
+      },
+      "expect": {
+        "outcome": "corrupt",
+        "phase": "read",
+        "layer": 1
+      }
+    },
+    {
+      "id": "SG-V-BND-0055",
+      "description": "zstd stream of 309 bytes plus 1000 trailing zero bytes, MaxInput 309 = stream size: corrupt (trailing data); the source is asked for no more than MaxInput+1 bytes",
+      "rules": [
+        "SG-R-INP-01",
+        "SG-R-INP-02",
+        "SG-R-CDC-05"
+      ],
+      "tags": [
+        "boundary",
+        "input-limit",
+        "trailing",
+        "zstd",
+        "needs-zstd"
+      ],
+      "tier": "small",
+      "encodings": [
+        "zstd"
+      ],
+      "input": {
+        "file": "vectors/small/SG-V-BND-0055.bin",
+        "sha256": "2fc7d7008c82315bf3c71a7e2ab71dc1a42f399f8f2aceec9495898a8bd18bd3"
+      },
+      "limits": {
+        "max_input": 309,
+        "max_output": 1073741824,
+        "max_ratio": "none"
+      },
+      "expect": {
+        "outcome": "corrupt",
+        "phase": "read",
+        "layer": 1
+      }
+    },
+    {
+      "id": "SG-V-BND-0056",
+      "description": "identity body of 101 bytes with MaxInput 100 (control): identity takes every byte it passes, so the 101st is input_limit",
+      "rules": [
+        "SG-R-INP-01",
+        "SG-R-INP-02",
+        "SG-R-CDC-10"
+      ],
+      "tags": [
+        "boundary",
+        "input-limit",
+        "identity"
+      ],
+      "tier": "small",
+      "encodings": [],
+      "input": {
+        "file": "vectors/small/SG-V-BND-0056.bin",
+        "sha256": "ff3b54ab2ea01b3c845fc84a14608dbb0b39b6133320fa039ea2e99b5434c443"
+      },
+      "limits": {
+        "max_input": 100,
+        "max_output": 1073741824,
+        "max_ratio": "none"
+      },
+      "expect": {
+        "outcome": "input_limit",
+        "phase": "read",
+        "delivered_exactly": 100,
+        "layer": 1
+      }
+    },
+    {
+      "id": "SG-V-BND-0057",
+      "description": "identity body of 1100 bytes with MaxInput 100 (control): input_limit after exactly 100 bytes",
+      "rules": [
+        "SG-R-INP-01",
+        "SG-R-INP-02",
+        "SG-R-CDC-10"
+      ],
+      "tags": [
+        "boundary",
+        "input-limit",
+        "identity"
+      ],
+      "tier": "small",
+      "encodings": [
+        "identity"
+      ],
+      "input": {
+        "file": "vectors/small/SG-V-BND-0057.bin",
+        "sha256": "daa2be011f0eeec0f20c95fbe03f24e933689f86f12e608420a5f2984a7ab032"
+      },
+      "limits": {
+        "max_input": 100,
+        "max_output": 1073741824,
+        "max_ratio": "none"
+      },
+      "expect": {
+        "outcome": "input_limit",
+        "phase": "read",
+        "delivered_exactly": 100,
+        "layer": 1
       }
     },
     {

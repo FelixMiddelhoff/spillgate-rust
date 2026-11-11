@@ -69,7 +69,12 @@ impl SpillgateReader<'_> { pub fn close(&mut self); /* idempotent, SG-R-RDR-06 *
 - `meter.rs`: `InputMeter<R>` wraps the raw source for layer 1 and a lower layer's reader for the
   others. It implements `BufRead` and counts consumed bytes exactly (`consume`). It fetches at
   most 4 KiB at a time from a pull source, enforces `max_input` with the one probe byte
-  (SG-R-INP-01/02) on layer 1, applies SG-R-RDR-03 (100 empty reads in a row = `internal`) and
+  (SG-R-INP-01/02) on layer 1: a codec's `fill_buf` shows the probe (alone, never together with
+  earlier bytes) and only consuming it counts; `LayerGuard::call` checks `consumed > max_input` at
+  the end of every codec step and overrides what the codec returned; identity gets the strict view
+  (`InputMeter::strict`) which never shows the probe; codecs that find trailing data only peek
+  (gzip first byte != 0x1f, zstd first byte cannot start a frame, deflate and brotli peek after the
+  end), applies SG-R-RDR-03 (100 empty reads in a row = `internal`) and
   SG-R-RDR-04 (source reports more than requested = `internal`; with `Read` this is a source
   returning `n > buf.len()`), converts source `io::Error` to `source_error`, retries `Interrupted`.
   After a terminal condition it never reads the source again (SG-R-LAY-09).

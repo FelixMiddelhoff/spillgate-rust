@@ -171,11 +171,17 @@ impl<'a> ZstdReader<'a> {
 
     /// Start the next frame. False means a clean end of the input.
     fn next_frame(&mut self) -> Result<bool, Error> {
-        if self.input.peek()?.is_none() {
+        let Some(first) = self.input.peek()? else {
             if self.frames > 0 {
                 return Ok(false);
             }
             return Err(Error::corrupt("zstd: an empty input is not a zstd stream"));
+        };
+        if self.frames > 0 && first != FRAME_MAGIC.to_le_bytes()[0] && first & 0xf0 != SKIPPABLE_MAGIC.to_le_bytes()[0]
+        {
+            // Cannot start another frame: trailing data. The byte was only looked at, it is not
+            // consumed (SG-R-INP-01).
+            return Err(Error::corrupt("zstd: data that is not a zstd frame follows the stream"));
         }
         let mut magic = [0u8; 4];
         self.input.read_exact(&mut magic, "zstd magic number")?;

@@ -86,7 +86,7 @@ Evaluation order is normative and decides the outcome class when several faults 
 
 ## 7. Input limit
 
-- **SG-R-INP-01** If MaxInput is set, a codec taking a MaxInput+1-th byte from the source is `input_limit`. It applies to the chain's source (layer 1 input), also for identity-only chains. A stream that fits in MaxInput bytes is unaffected even if the source holds more bytes after it.
+- **SG-R-INP-01** If MaxInput is set, a codec taking a MaxInput+1-th byte from the source is `input_limit`. It applies to the chain's source (layer 1 input), also for identity-only chains. A stream that fits in MaxInput bytes is unaffected even if the source holds more bytes after it. Taking means consuming, as in SG-R-RAT-02: a codec may look at the byte after the last permitted one without taking it, and looking at it is not a violation; a codec that finds data there after the end of a complete stream reports it under its own rules (SG-R-CDC-02..05: `corrupt`) and does not take it. A codec that needs that byte to go on (the stream is cut at the limit and the source continues) takes it and the result is `input_limit`, checked at the end of every codec step; only when the source itself ends is the stream truncated (`corrupt`).
 - **SG-R-INP-02** With MaxInput set the implementation MUST NOT request more than MaxInput+1 bytes from the source in total; the one extra byte is the probe that detects the violation.
 
 ## 8. Codecs

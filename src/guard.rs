@@ -170,9 +170,16 @@ impl<'a> LayerGuard<'a> {
         let wanted = buf.len();
         let result = catch_unwind(AssertUnwindSafe(|| self.codec.read(buf)));
         let error = match result {
-            Ok(Ok(n)) if n <= wanted => return Ok(n),
-            Ok(Ok(_)) => Error::new(ErrorKind::Internal, "codec returned more bytes than requested"),
-            Ok(Err(error)) => error,
+            Ok(Ok(n)) if n > wanted => Error::new(ErrorKind::Internal, "codec returned more bytes than requested"),
+            // End of the codec step (SG-R-INP-01): a codec that took the MaxInput+1-th byte has
+            // violated the input limit, whatever it returned. Looking at the byte is not taking it.
+            Ok(step) => match self.meter.limit_violation() {
+                Some(violation) => violation,
+                None => match step {
+                    Ok(n) => return Ok(n),
+                    Err(error) => error,
+                },
+            },
             Err(payload) => {
                 // Dropping a hostile payload can panic again.
                 let _ = catch_unwind(AssertUnwindSafe(move || drop(payload)));
