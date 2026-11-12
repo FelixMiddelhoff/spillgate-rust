@@ -30,7 +30,7 @@ spillgate-test-support = { path = "crates/test-support" }
 flate2 = "1"
 sha2 = "0.10"
 serde_json = "1"
-zstd = "0.13"
+zstd = "0.14"
 # Reference brotli encoder (and reference decoder for differential tests); tests only.
 brotli = { version = "8", default-features = false, features = ["std"] }
 # The unpatched upstream decoder the vendored copy is compared with (src/vendored/brotli_decompressor).
