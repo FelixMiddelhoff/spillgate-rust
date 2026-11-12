@@ -217,3 +217,22 @@ fn a_late_source_error_in_a_brotli_chain_delivers_the_same_prefix() {
         assert!(p.starts_with(&o.bytes));
     }
 }
+
+#[cfg(feature = "br")]
+#[test]
+fn trailing_data_after_a_brotli_stream_delivers_the_whole_stream_before_the_error() {
+    // Covers: SG-I-09 SG-R-RDR-01 SG-R-CDC-04
+    // The stream is complete and valid; what follows it makes the whole input corrupt. The bytes of
+    // the stream come first, every one of them, whatever the read size and the chunking.
+    let d = decoder();
+    for size in [5usize, 1_000, 70_000, 300_000] {
+        let p = payload(size);
+        for tail in [&[0xffu8][..], &[0u8; 100][..]] {
+            let mut stream = brotli_encode(&p);
+            stream.extend_from_slice(tail);
+            let o = assert_invariant(&d, &stream, &["br"], &format!("{size} bytes + {} trailing", tail.len()));
+            assert_eq!(o.kind, Some(ErrorKind::Corrupt), "{size}");
+            assert!(o.bytes == p, "{size}: the delivered prefix is not the whole stream");
+        }
+    }
+}

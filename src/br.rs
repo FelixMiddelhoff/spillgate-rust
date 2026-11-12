@@ -228,13 +228,13 @@ impl BrotliReader<'_> {
                     // The final meta-block is complete: nothing may follow it.
                     let trailing = match self.input.fill_buf() {
                         Ok([]) => None,
-                        Ok(_) => return Err(Error::corrupt("brotli: unexpected data after the end of the stream")),
+                        Ok(_) => Some(Error::corrupt("brotli: unexpected data after the end of the stream")),
                         Err(e) => Some(Error::from_input(e)),
                     };
                     return match trailing {
                         Some(error) if output_offset > 0 => {
-                            // The bytes of this step are valid and come first; the source error
-                            // follows on the next read, whatever the read size was (SG-R-RDR-01).
+                            // The bytes of this step are valid and come first; the error follows
+                            // on the next read, whatever the read size was (SG-R-RDR-01).
                             self.failure = Some(error);
                             Ok(output_offset)
                         }
@@ -330,8 +330,9 @@ mod tests {
             input_error: None,
         };
         let mut buf = [0u8; 64];
-        let first = r.read(&mut buf);
-        assert_eq!(first.unwrap_err().kind(), ErrorKind::Corrupt);
+        // The stream itself is valid: its bytes come first, then the error (SG-R-RDR-01).
+        assert_eq!(r.read(&mut buf).unwrap(), 5);
+        assert_eq!(&buf[..5], b"hello");
         assert!(r.state.is_none());
         for _ in 0..3 {
             assert_eq!(r.read(&mut buf).unwrap_err().kind(), ErrorKind::Corrupt);
