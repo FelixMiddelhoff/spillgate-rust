@@ -67,6 +67,22 @@ Regression test: `tests/br_hostile.rs`, `many_tiny_meta_blocks_with_256_trees_ea
 still allocated and cleared per meta-block (two 16 KiB blocks), and the trees themselves are still built
 per meta-block, which is real work the stream asks for.
 
+## The patches (behavior change, strictness; backports of upstream fixes)
+
+`decode.rs`, `BrotliDecompressStream`, state `BROTLI_STATE_METABLOCK_DONE`, minimal logic copied from upstream
+`brotli-decompressor` (error codes equal to upstream and to the C reference):
+
+- upstream `8ed0d7d` ("Fix PADDING_2 error being silently dropped at end of stream"): a `break` after setting
+  `BROTLI_DECODER_ERROR_FORMAT_PADDING_2` (-15) when the unused bits of the last byte are not zero. Before, the
+  error was overwritten by the success of the final write.
+- upstream `693a4a1` ("Reject meta-blocks that exceed their declared MLEN"): at the start of `METABLOCK_DONE`,
+  `meta_block_remaining_len < 0` is `BROTLI_DECODER_ERROR_FORMAT_BLOCK_LENGTH_2` (-10), before cleanup. Before,
+  only `WriteRingBuffer` checked it (BLOCK_LENGTH_1, -9), which a non-last meta-block that did not wrap the ring
+  buffer never reached.
+
+Tests: `tests/br_upstream_fixes.rs` (5 tests, formerly `#[ignore]`). The vendored crate is still based on 5.0.0;
+it was not rebased on 6.3.x (rewrite, and the CPU patch above does not apply there).
+
 ## Differential test
 
 `differential_tests.rs` (new, not upstream) runs this copy and the unpatched upstream crate (a
@@ -76,3 +92,8 @@ input consumption: 400 encoder streams (4 payload kinds, 5 sizes, qualities 0/1/
 10/16/22/24), multi-megabyte multi-meta-block streams, hostile meta-block streams of free shapes
 (including a large table set followed by small ones), 2400 damaged streams (bit flips, byte
 overwrites, truncation, insertion) and random bytes.
+
+Allowed differences to unpatched 5.0.0 (and only these): the vendored decoder fails with error code -15, -10 or -9
+where 5.0.0 succeeded (or failed later for another reason), the vendored output is a prefix of the 5.0.0 output
+and it consumed no more input. Everything else must be identical. In the 2400 damaged streams this covers the
+streams rejected for the two backported reasons above.

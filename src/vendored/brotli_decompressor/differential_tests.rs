@@ -71,12 +71,18 @@ macro_rules! drive {
 }
 
 fn vendored(data: &[u8], in_chunk: usize, out_cap: usize) -> Trace {
+    vendored_code(data, in_chunk, out_cap).0
+}
+
+/// The trace and the decoder's error code (-15 PADDING_2, -10 BLOCK_LENGTH_2, -9 BLOCK_LENGTH_1).
+fn vendored_code(data: &[u8], in_chunk: usize, out_cap: usize) -> (Trace, i32) {
     let mut state = BrotliState::new_strict(
         StandardAlloc::default(),
         StandardAlloc::default(),
         StandardAlloc::default(),
     );
-    drive!(state, data, in_chunk, out_cap, BrotliDecompressStream)
+    let t = drive!(state, data, in_chunk, out_cap, BrotliDecompressStream);
+    (t, state.error_code as i32)
 }
 
 fn upstream(data: &[u8], in_chunk: usize, out_cap: usize) -> Trace {
@@ -100,12 +106,26 @@ fn same(data: &[u8], what: &str) -> Trace {
     ] {
         // a tiny output buffer on a large output is slow: use it for small streams only
         let out_cap = if out_cap < 16 && data.len() > 3000 { 4096 } else { out_cap };
-        let a = vendored(data, in_chunk, out_cap);
+        let (a, code) = vendored_code(data, in_chunk, out_cap);
         let b = upstream(data, in_chunk, out_cap);
-        assert_eq!(a, b, "{what}: input chunk {in_chunk}, output buffer {out_cap}");
+        if a != b {
+            // The ONLY allowed difference (backports of upstream 8ed0d7d and 693a4a1): unpatched 5.0.0
+            // accepted the stream (or failed later for another reason), the vendored decoder rejects it because of nonzero padding after the
+            // last meta-block (-15) or because a meta-block overshoots its MLEN (-10 / -9).
+            let ctx = format!("{what}: input chunk {in_chunk}, output buffer {out_cap}");
+            // (upstream may also fail, but later and for another reason, when the overshoot was not the
+            // first thing it noticed; it is never a difference in the other direction.)
+            assert_ne!(b.verdict, "needs-input", "{ctx}: upstream needs input where vendored fails");
+            assert_eq!(a.verdict, "failure", "{ctx}: vendored must reject it");
+            assert!([-15, -10, -9].contains(&code), "{ctx}: unexpected error code {code}");
+            assert!(b.output.starts_with(&a.output), "{ctx}: vendored output is not a prefix");
+            assert!(a.consumed <= b.consumed, "{ctx}: vendored consumed more input");
+            continue;
+        }
         first.get_or_insert(a);
     }
-    first.unwrap()
+    // None: every shape of feeding was one of the allowed rejections.
+    first.unwrap_or(Trace { verdict: "failure", output: Vec::new(), consumed: 0 })
 }
 
 struct Rng(u64);

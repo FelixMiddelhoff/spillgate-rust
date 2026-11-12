@@ -127,6 +127,7 @@ fn a_late_source_error_delivers_the_same_prefix_for_every_read_size_and_chunking
     // Covers: SG-I-09 SG-R-RDR-01 SG-R-RDR-05 SG-R-LAY-06
     let d = decoder();
     let p = payload(300_000);
+    #[allow(unused_mut)] // only mutated when a codec feature is enabled
     let mut streams: Vec<(&str, Vec<u8>)> = vec![("gzip", gz(&p)), ("deflate", zl(&p)), ("deflate", raw(&p))];
     #[cfg(feature = "br")]
     streams.push(("br", brotli_encode(&p)));

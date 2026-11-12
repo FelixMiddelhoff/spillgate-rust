@@ -3200,6 +3200,11 @@ pub fn BrotliDecompressStream<AllocU8: alloc::Allocator<u8>,
           break;
         }
         BrotliRunningState::BROTLI_STATE_METABLOCK_DONE => {
+          // spillgate backport of upstream 693a4a1: a command that overshoots MLEN is invalid (RFC 7932 9.3).
+          if (s.meta_block_remaining_len < 0) {
+            result = BrotliDecoderErrorCode::BROTLI_DECODER_ERROR_FORMAT_BLOCK_LENGTH_2;
+            break;
+          }
           s.BrotliStateCleanupAfterMetablock();
           if (s.is_last_metablock == 0) {
             s.state = BrotliRunningState::BROTLI_STATE_METABLOCK_BEGIN;
@@ -3207,6 +3212,7 @@ pub fn BrotliDecompressStream<AllocU8: alloc::Allocator<u8>,
           }
           if (!bit_reader::BrotliJumpToByteBoundary(&mut s.br)) {
             result = BrotliDecoderErrorCode::BROTLI_DECODER_ERROR_FORMAT_PADDING_2;
+            break; // spillgate backport of upstream 8ed0d7d
           }
           if (s.buffer_length == 0) {
             bit_reader::BrotliBitReaderUnload(&mut s.br);

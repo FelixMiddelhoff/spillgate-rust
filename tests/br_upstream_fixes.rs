@@ -242,7 +242,6 @@ fn overshoot_then_more(mlen: u64, command: u64, distance: u64, extra: &[(u64, u3
 // buffer. The three tests below are separate so that each shape reports on its own.
 
 #[test]
-#[ignore = "reason: known, fix pending rebase to 6.3.1"] // upstream 693a4a1
 fn a_non_last_meta_block_inserting_more_literals_than_mlen_is_corrupt() {
     // Covers: SG-R-CDC-04 SG-R-CDC-08
     expect_corrupt(
@@ -252,7 +251,6 @@ fn a_non_last_meta_block_inserting_more_literals_than_mlen_is_corrupt() {
 }
 
 #[test]
-#[ignore = "reason: known, fix pending rebase to 6.3.1"] // upstream 693a4a1
 fn a_non_last_meta_block_copying_more_than_mlen_is_corrupt() {
     // Covers: SG-R-CDC-04 SG-R-CDC-08
     expect_corrupt(
@@ -262,7 +260,6 @@ fn a_non_last_meta_block_copying_more_than_mlen_is_corrupt() {
 }
 
 #[test]
-#[ignore = "reason: known, fix pending rebase to 6.3.1"] // upstream 693a4a1
 fn a_non_last_meta_block_with_a_dictionary_word_longer_than_mlen_is_corrupt() {
     // Covers: SG-R-CDC-04 SG-R-CDC-08
     expect_corrupt(
@@ -415,7 +412,6 @@ fn endless(stream: &[u8], filler: u8, limits: Limits, budget: u64) -> Outcome {
 // -- 8ed0d7d, 677eef1: padding -------------------------------------------------------------------
 
 #[test]
-#[ignore = "reason: known, fix pending rebase to 6.3.1"] // upstream 8ed0d7d
 fn nonzero_padding_bits_at_the_end_of_the_stream_are_corrupt() {
     // Covers: SG-R-CDC-04 SG-R-CDC-08
     // Upstream 8ed0d7d: PADDING_2 was set but not returned, and the final write replaced it with success.
@@ -431,7 +427,6 @@ fn nonzero_padding_bits_at_the_end_of_the_stream_are_corrupt() {
 }
 
 #[test]
-#[ignore = "reason: known, fix pending rebase to 6.3.1"] // upstream 8ed0d7d
 fn nonzero_padding_bits_after_a_compressed_last_meta_block_are_corrupt() {
     // Covers: SG-R-CDC-04 SG-R-CDC-08
     // Upstream 8ed0d7d, the same rule after a compressed meta-block.
