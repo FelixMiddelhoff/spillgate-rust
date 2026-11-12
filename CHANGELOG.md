@@ -2,7 +2,7 @@
 
 Versions below 1.0 may still change the API.
 
-## Unreleased (intended as 0.1.0)
+## 0.1.0 - 2026-11-12
 
 - SG-R-INP-01 is exact (corpus 0.2.0, vectors `SG-V-BND-0041..0057`): looking at the byte after `max_input` (to find trailing data) is no longer `input_limit`, taking it is. A complete stream of `max_input` bytes followed by data is `corrupt`; a stream cut at the limit with more source behind it is `input_limit`. The layer guard checks the taken count at the end of every codec step; identity keeps the strict view.
 

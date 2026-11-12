@@ -282,7 +282,7 @@ checksum = "3a219298ac11a56ea9a6d2120044824d6f01aeb034955e7af7bc16858527deea"
 
 [[package]]
 name = "spillgate"
-version = "0.1.0-dev"
+version = "0.1.0"
 dependencies = [
  "alloc-no-stdlib",
  "alloc-stdlib",

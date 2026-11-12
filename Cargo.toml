@@ -3,7 +3,7 @@ members = [".", "crates/test-support"]
 
 [package]
 name = "spillgate"
-version = "0.1.0-dev"
+version = "0.1.0"
 edition = "2021"
 rust-version = "1.85"
 description = "Decode untrusted compressed data (gzip, deflate, brotli, zstd) with mandatory limits: decompression bombs end in typed errors."
