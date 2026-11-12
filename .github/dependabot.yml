@@ -6,9 +6,15 @@ updates:
   - package-ecosystem: cargo
     directory: /
     schedule: { interval: weekly }
+    ignore:
+      # Vendored with spillgate patches (src/vendored/brotli_decompressor); the dev-dependency is the unpatched reference. Updates are manual rebases.
+      - dependency-name: "brotli-decompressor"
   - package-ecosystem: cargo
     directory: /fuzz
     schedule: { interval: weekly }
+    ignore:
+      # Vendored with spillgate patches (src/vendored/brotli_decompressor); the dev-dependency is the unpatched reference. Updates are manual rebases.
+      - dependency-name: "brotli-decompressor"
   - package-ecosystem: cargo
     directory: /tools/alloc-check
     schedule: { interval: weekly }
