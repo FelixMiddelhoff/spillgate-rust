@@ -42,6 +42,31 @@ Left out: the `Read`/`Write` adapters (`reader.rs`, `writer.rs`, `io_wrappers.rs
 - `mod.rs`: relaxed lints for this module only (third-party style: `warnings`, `clippy::*`,
   `missing_docs`).
 
+## The patch (behavior-preserving, CPU)
+
+`huffman/mod.rs` (`HuffmanTreeGroup::init`, new `retire`) and `state.rs` (`BrotliStateMetablockBegin`,
+`BrotliStateCleanupAfterMetablock`, `BrotliStateCleanup`): at the end of a meta-block the three tree
+groups are no longer freed. The `htrees` offsets are still reallocated (at most 1 KiB), but the table
+memory `codes` is kept and reused by the next meta-block when it is large enough (otherwise freed and
+allocated as before). It is released when the decoder state is dropped (`BrotliStateCleanup`) and no
+later than before on every error path, because the state itself is dropped. No `unsafe`, no new API.
+
+Why the output stays bit-identical: every tree builder writes the whole table of its tree before the
+table is read, so a reused table's stale entries are never observed; the memory is plain initialized
+memory (safe Rust), so a bug there could change output but never read uninitialized bytes. Peak memory
+is unchanged (the tables of a meta-block were already live while it was decoded; they now stay allocated
+between meta-blocks, at most the size of the largest meta-block's tables, about 3.3 MiB).
+
+Measured, 4000 meta-blocks that each declare 256 literal and 256 distance trees (2.86 MB in, 4000
+bytes out), release profile on the development machine: 2.47-2.96 s before (about 860-1030 ns per input
+byte), 0.28 s after (98 ns per input byte), 9x. Dev profile: 0.41 s (was 14.9 s with the unpatched
+decoder in an optimized dev profile).
+
+Regression test: `tests/br_hostile.rs`, `many_tiny_meta_blocks_with_256_trees_each_cost_bounded_cpu`
+(bound 1.5 s, best of three). Not done (kept to the minimum that removes the cost): the context maps are
+still allocated and cleared per meta-block (two 16 KiB blocks), and the trees themselves are still built
+per meta-block, which is real work the stream asks for.
+
 ## Differential test
 
 `differential_tests.rs` (new, not upstream) runs this copy and the unpatched upstream crate (a

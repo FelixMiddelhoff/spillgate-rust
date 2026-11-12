@@ -441,9 +441,9 @@ impl <'brotli_state,
         self.dist_context_map_slice_index = 0;
         self.dist_htree_index = 0;
         self.context_lookup = &kContextLookup[0];
-        self.literal_hgroup.reset(&mut self.alloc_u32, &mut self.alloc_hc);
-        self.insert_copy_hgroup.reset(&mut self.alloc_u32, &mut self.alloc_hc);
-        self.distance_hgroup.reset(&mut self.alloc_u32, &mut self.alloc_hc);
+        self.literal_hgroup.retire(&mut self.alloc_u32);
+        self.insert_copy_hgroup.retire(&mut self.alloc_u32);
+        self.distance_hgroup.retire(&mut self.alloc_u32);
     }
     pub fn BrotliStateCleanupAfterMetablock(self : &mut Self) {
         self.alloc_u8.free_cell(core::mem::replace(&mut self.context_map,
@@ -454,13 +454,17 @@ impl <'brotli_state,
                                              AllocU8::AllocatedMemory::default()));
 
 
-        self.literal_hgroup.reset(&mut self.alloc_u32, &mut self.alloc_hc);
-        self.insert_copy_hgroup.reset(&mut self.alloc_u32, &mut self.alloc_hc);
-        self.distance_hgroup.reset(&mut self.alloc_u32, &mut self.alloc_hc);
+        self.literal_hgroup.retire(&mut self.alloc_u32);
+        self.insert_copy_hgroup.retire(&mut self.alloc_u32);
+        self.distance_hgroup.retire(&mut self.alloc_u32);
     }
 
    fn BrotliStateCleanup(self : &mut Self) {
       self.BrotliStateCleanupAfterMetablock();
+      // spillgate: the table memory kept between meta-blocks is released here.
+      self.literal_hgroup.reset(&mut self.alloc_u32, &mut self.alloc_hc);
+      self.insert_copy_hgroup.reset(&mut self.alloc_u32, &mut self.alloc_hc);
+      self.distance_hgroup.reset(&mut self.alloc_u32, &mut self.alloc_hc);
       self.alloc_u8.free_cell(core::mem::replace(&mut self.ringbuffer,
                               AllocU8::AllocatedMemory::default()));
       self.alloc_hc.free_cell(core::mem::replace(&mut self.block_type_length_state.block_type_trees,

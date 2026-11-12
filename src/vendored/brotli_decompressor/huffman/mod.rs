@@ -58,15 +58,27 @@ impl<AllocU32 : alloc::Allocator<u32>,
      AllocHC : alloc::Allocator<HuffmanCode> > HuffmanTreeGroup<AllocU32, AllocHC> {
     pub fn init(self : &mut Self, mut alloc_u32 : &mut AllocU32, mut alloc_hc : &mut AllocHC,
                 alphabet_size : u16, max_symbol: u16, ntrees : u16) {
-        self.reset(&mut alloc_u32, &mut alloc_hc);
+        // spillgate: keep the table memory of the previous meta-block when it is big enough, so a
+        // stream of many tiny meta-blocks that each declare hundreds of trees does not allocate and
+        // zero megabytes per meta-block (see VENDORED.md). The tables are written by the tree
+        // builders before they are read, so stale entries are never observed.
+        let nt = ntrees as usize;
+        let needed = nt * BROTLI_HUFFMAN_MAX_TABLE_SIZE as usize;
+        alloc_u32.free_cell(core::mem::replace(&mut self.htrees,
+                                               AllocU32::AllocatedMemory::default()));
+        if self.codes.slice().len() < needed {
+            alloc_hc.free_cell(core::mem::replace(&mut self.codes,
+                                                  AllocHC::AllocatedMemory::default()));
+        }
         self.alphabet_size = alphabet_size;
         self.max_symbol = max_symbol;
         self.num_htrees = ntrees;
-        let nt = ntrees as usize;
         let _ = core::mem::replace(&mut self.htrees,
                            alloc_u32.alloc_cell(nt));
-        let _ = core::mem::replace(&mut self.codes,
-                           alloc_hc.alloc_cell(nt * BROTLI_HUFFMAN_MAX_TABLE_SIZE as usize));
+        if self.codes.slice().len() < needed {
+            let _ = core::mem::replace(&mut self.codes,
+                               alloc_hc.alloc_cell(needed));
+        }
     }
 
 //  pub fn get_tree_mut<'a>(self :&'a mut Self, index : u32, mut tree_out : &'a mut [HuffmanCode]) {
@@ -86,6 +98,12 @@ impl<AllocU32 : alloc::Allocator<u32>,
     pub fn get_tree(&self, index : u32) -> &[HuffmanCode] {
         let start : usize = fast_slice!((self.htrees)[index as usize]) as usize;
         fast_slice!((self.codes)[start;])
+    }
+    /// Forget the trees but keep the table memory for the next meta-block (spillgate).
+    pub fn retire(self : &mut Self, alloc_u32 : &mut AllocU32) {
+        alloc_u32.free_cell(core::mem::replace(&mut self.htrees,
+                                               AllocU32::AllocatedMemory::default()));
+        self.num_htrees = 0;
     }
     pub fn reset(self : &mut Self, alloc_u32 : &mut AllocU32, alloc_hc : &mut AllocHC) {
         alloc_u32.free_cell(core::mem::replace(&mut self.htrees,

@@ -488,25 +488,30 @@ mod hostile_trees {
 #[test]
 fn many_tiny_meta_blocks_with_256_trees_each_cost_bounded_cpu() {
     // Covers: SG-R-MEM-03 SG-R-CDC-01
-    // Measured 2026-11-12, brotli-decompressor 5.0.0, 4000 meta-blocks (2.86 MB in, 4000 bytes out):
-    // 2.96 s in release (1033 ns per input byte), 14.9 s in the optimized-dependency debug profile.
-    // That is about 0.74 ms of table work per 716-byte meta-block (the Java port had the same cost,
-    // 2.67 s, until its decoder was changed). The cost is linear in the input and the output is
-    // smaller than the input, so the ratio limit never fires; only MaxInput and the caller's own
-    // deadline bound it (docs/threat-model, CPU residual risk). The bound here is deliberately
-    // generous: it catches a decoder that turns quadratic, not today's constant.
-    const BLOCKS: usize = 1000;
+    // 4000 meta-blocks of 716 bytes each (2.86 MB in, 4000 bytes out), each declaring 256 literal and
+    // 256 distance trees. The ratio limit never fires on this (the output is smaller than the input),
+    // so the decoder's own cost per input byte is the only protection besides MaxInput and a deadline.
+    // Measured 2026-11-12, release: unpatched brotli-decompressor 5.0.0 2.5-3.0 s (about 900-1030 ns
+    // per input byte, 0.74 ms of table allocation and zeroing per meta-block), vendored and patched
+    // decoder (tables kept between meta-blocks, src/vendored/brotli_decompressor/VENDORED.md) 0.28 s
+    // (about 100 ns per input byte). The dev profile gives the same (0.34 s; the package is optimized in
+    // dev). The bound is 1.5 s on the best of three runs: 5 times the measured time as margin for slow or
+    // loaded CI machines, and below the old decoder's time even on this machine.
+    const BLOCKS: usize = 4000;
     let stream = hostile_trees::stream(BLOCKS);
     let d = decoder(loose(), 24);
-    let start = std::time::Instant::now();
-    let o = run_with(&d, &stream, &["br"], 65_536, usize::MAX);
-    let best = start.elapsed();
-    assert_eq!((o.kind, o.bytes.len()), (None, BLOCKS));
+    let mut best = std::time::Duration::MAX;
+    for _ in 0..3 {
+        let start = std::time::Instant::now();
+        let o = run_with(&d, &stream, &["br"], 65_536, usize::MAX);
+        best = best.min(start.elapsed());
+        assert_eq!((o.kind, o.bytes.len()), (None, BLOCKS));
+    }
     eprintln!(
-        "brotli hostile meta-blocks: {BLOCKS} blocks, {} input bytes, best {:.3} s ({:.0} ns/input byte)",
+        "brotli hostile meta-blocks: {BLOCKS} blocks, {} input bytes, best of 3 {:.3} s ({:.0} ns/input byte)",
         stream.len(),
         best.as_secs_f64(),
         best.as_nanos() as f64 / stream.len() as f64
     );
-    assert!(best.as_secs() < 90, "took {best:?}");
+    assert!(best.as_millis() < 1500, "took {best:?}");
 }
