@@ -44,7 +44,7 @@ The API is synchronous (`std::io::Read`). In async code run it on a blocking thr
 | Feature | Adds | Dependency |
 | --- | --- | --- |
 | (default) | `identity`, `gzip`, `deflate` (zlib and raw), own DEFLATE decoder | none |
-| `br` | brotli, `spillgate::br` | `brotli-decompressor` (pure Rust, pinned exactly) |
+| `br` | brotli, `spillgate::br` | vendored `brotli-decompressor` 5.0.0 (pure Rust, no `unsafe`), allocator crates `alloc-no-stdlib`, `alloc-stdlib` pinned exactly |
 | `zstd` | zstd, `spillgate::zstd` (own decoder, no dictionaries) | none |
 
 Register `br` and `zstd` with `Decoder::builder(limits).codec("br", br::codec(..)?)`; see the
@@ -99,4 +99,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). The design is in `docs/design.md`.
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE). The vendored brotli decoder (`src/vendored/brotli_decompressor`) is BSD-3-Clause, see the `LICENSE` file there.

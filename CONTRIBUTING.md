@@ -22,7 +22,7 @@ skipped. Without features, only the vectors for identity, gzip and deflate run. 
 - A test names the rules it protects with `// Covers: SG-R-...` or in its name (`fn sg_r_lay_03_...`); `tests/spectrace.rs` reads that. It is a checklist, not proof that the test asserts everything the rule says. Review the assertions too.
 - Test first for every bug. Never weaken a test or a conformance vector to make code pass.
 - `conformance/` and `spec/` are copies. Do not edit them here; update them from the reference repository and record the release in `conformance/SOURCE`.
-- The crate has no dependencies except `brotli-decompressor` behind the `br` feature (pinned exactly). `flate2`, `zstd` and friends are dev-dependencies for differential tests only and must never be used in `src/`.
+- The crate has no dependencies except `alloc-no-stdlib` and `alloc-stdlib` behind the `br` feature (pinned exactly; they serve the vendored brotli decoder in `src/vendored`, which is third-party code: change it only with a note in its `VENDORED.md` and a differential test). `flate2`, `zstd` and friends are dev-dependencies for differential tests only and must never be used in `src/`.
 - No `unsafe` (the crate forbids it, tests included; the counting allocator lives in `tools/alloc-check`). No `unwrap`, `expect`, `panic!` or unchecked indexing on input-derived data in `src/`; arithmetic on sizes from the stream is checked or saturating.
 - Public API changes update `docs/how-to.md`, README and CHANGELOG in the same change; the how-to snippets are compiled by `cargo test --all-features --doc` and `tests/howto_snippets.rs`.
 - MSRV is 1.85 for the default features. Do not raise it without a changelog entry.

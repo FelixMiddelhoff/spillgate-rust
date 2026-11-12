@@ -12,8 +12,9 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
-//! The decoder is the pure Rust `brotli-decompressor` crate (safe code, no FFI), pinned to an
-//! exact version. What this module adds is what a hostile stream needs around it:
+//! The decoder is `brotli-decompressor` 5.0.0 (pure Rust, no FFI, no `unsafe`), vendored into this
+//! crate (`src/vendored/brotli_decompressor`, see `VENDORED.md` there for the upstream version, the
+//! license and the changes). What this module adds is what a hostile stream needs around it:
 //!
 //! - The window is read from the first byte of the stream and checked against the cap before the
 //!   decoder allocates anything (SG-R-CDC-04). The default cap is 24 bits (16 MiB - 16 bytes). The
@@ -27,7 +28,7 @@
 
 use std::io::BufRead;
 
-use brotli_decompressor::{BrotliDecompressStream, BrotliResult, BrotliState, StandardAlloc};
+use crate::vendored::brotli_decompressor::{BrotliDecompressStream, BrotliResult, BrotliState, StandardAlloc};
 
 use crate::codec::{Codec, CodecReader};
 use crate::error::{Error, ErrorKind};

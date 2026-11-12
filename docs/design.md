@@ -11,7 +11,7 @@ tests**, not the async structure: Rust is synchronous and pull based (`std::io::
 - `#![forbid(unsafe_code)]` (Cargo lint). No `unwrap`, `expect`, `panic!`, or unchecked indexing on
   data derived from the input (clippy lints are set in `Cargo.toml`; tests may use them with
   `#[allow]`). Arithmetic on sizes from the stream is checked or saturating.
-- Core has **no dependencies**. Feature `br` adds `brotli-decompressor` (pinned exactly). Feature
+- Core has **no dependencies**. Feature `br` vendors `brotli-decompressor` 5.0.0 (`src/vendored`) and depends on its two allocator crates, `alloc-no-stdlib` and `alloc-stdlib` (pinned exactly). Feature
   `zstd` adds nothing (own decoder).
 - Whole input accounting is exact: codecs read through `BufRead` and `consume` only what they used.
 - Every part has unit tests that name the rules they cover as `// Covers: SG-R-...` comments or in

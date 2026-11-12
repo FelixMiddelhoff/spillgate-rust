@@ -17,7 +17,7 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
-//! Optional codecs are crate features: `br` (brotli, through the pure Rust `brotli-decompressor`)
+//! Optional codecs are crate features: `br` (brotli, a vendored copy of the pure Rust `brotli-decompressor`)
 //! and `zstd` (an own decoder in this crate).
 
 mod cancel;
@@ -35,6 +35,8 @@ mod reader;
 
 #[cfg(feature = "br")]
 pub mod br;
+#[cfg(feature = "br")]
+mod vendored;
 #[cfg(feature = "zstd")]
 pub mod zstd;
 

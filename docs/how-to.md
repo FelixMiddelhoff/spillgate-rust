@@ -479,8 +479,8 @@ let accept_encoding = "gzip, deflate, br, zstd";
 A stream that asks for a larger window than the cap fails with `ErrorKind::MemoryLimit` before a
 byte is decoded (the window is read from the header; the large-window brotli extension is always
 refused). The window is memory per in-flight request (see [memory.md](memory.md)): lower the caps
-on busy servers. `br` uses the pure Rust `brotli-decompressor` crate (no C, pinned to an exact
-version); `zstd` is an own decoder in this crate with no dependencies and no dictionary support
+on busy servers. `br` uses a vendored copy of the pure Rust `brotli-decompressor` crate (no C, no
+`unsafe`); `zstd` is an own decoder in this crate with no dependencies and no dictionary support
 (a dictionary frame is `corrupt`).
 
 Zstd has one more cost the output limits cannot see: frames that produce no output (empty frames,

@@ -27,9 +27,9 @@ The latest release only.
 
 The limits, header parsing, the DEFLATE decoder, gzip and deflate framing, the reader contract,
 the own zstd decoder (feature `zstd`) and the window and input handling around brotli (feature
-`br`) are in scope. Feature `br` uses the `brotli-decompressor` crate, pinned to an exact version:
-flaws inside that decoder go upstream, but report them to us too if the limiter should have
-contained them. Bugs in the Rust standard library, the compiler or other crates are reported
+`br`) are in scope. Feature `br` uses a vendored copy of the `brotli-decompressor` crate (5.0.0, with the changes
+listed in `src/vendored/brotli_decompressor/VENDORED.md`): flaws that are also in upstream go
+upstream, but report them to us too, and report anything the limiter should have contained. Bugs in the Rust standard library, the compiler or other crates are reported
 upstream; tell us as well if the limiter should have contained them.
 
 The crate forbids `unsafe` code. A memory-safety problem in it is a bug in a dependency or the
