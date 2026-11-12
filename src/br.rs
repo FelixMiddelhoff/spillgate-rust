@@ -86,6 +86,7 @@ impl Codec for BrotliCodec {
             state: None,
             finished: false,
             failure: None,
+            input_error: None,
         })
     }
 }
@@ -114,6 +115,10 @@ struct BrotliReader<'a> {
     finished: bool,
     /// The error that ended the stream; later reads repeat it and the decoder state is gone.
     failure: Option<Error>,
+    /// A failure of the input, held back while the decoder can still hand out what it has already
+    /// taken from it: otherwise the bytes delivered before the error would depend on the size of the
+    /// caller's reads (SG-R-RDR-01).
+    input_error: Option<Error>,
 }
 
 impl BrotliReader<'_> {
@@ -178,7 +183,17 @@ impl BrotliReader<'_> {
         }
         let step = buf.len().min(MAX_OUTPUT_STEP);
         loop {
-            let view = self.input.fill_buf().map_err(Error::from_input)?;
+            let view: &[u8] = if self.input_error.is_some() {
+                &[]
+            } else {
+                match self.input.fill_buf() {
+                    Ok(view) => view,
+                    Err(e) => {
+                        self.input_error = Some(Error::from_input(e));
+                        &[]
+                    }
+                }
+            };
             let source_ended = view.is_empty();
             let mut available_in = view.len();
             let mut input_offset = 0usize;
@@ -211,18 +226,31 @@ impl BrotliReader<'_> {
                     self.finished = true;
                     self.state = None;
                     // The final meta-block is complete: nothing may follow it.
-                    let more = !self.input.fill_buf().map_err(Error::from_input)?.is_empty();
-                    if more {
-                        return Err(Error::corrupt("brotli: unexpected data after the end of the stream"));
-                    }
-                    return Ok(output_offset);
+                    let trailing = match self.input.fill_buf() {
+                        Ok([]) => None,
+                        Ok(_) => return Err(Error::corrupt("brotli: unexpected data after the end of the stream")),
+                        Err(e) => Some(Error::from_input(e)),
+                    };
+                    return match trailing {
+                        Some(error) if output_offset > 0 => {
+                            // The bytes of this step are valid and come first; the source error
+                            // follows on the next read, whatever the read size was (SG-R-RDR-01).
+                            self.failure = Some(error);
+                            Ok(output_offset)
+                        }
+                        Some(error) => Err(error),
+                        None => Ok(output_offset),
+                    };
                 }
                 BrotliResult::NeedsMoreInput | BrotliResult::NeedsMoreOutput => {
                     if output_offset > 0 {
                         return Ok(output_offset);
                     }
                     if matches!(result, BrotliResult::NeedsMoreInput) && source_ended {
-                        return Err(Error::corrupt("brotli: the stream ends too early"));
+                        return Err(self
+                            .input_error
+                            .take()
+                            .unwrap_or_else(|| Error::corrupt("brotli: the stream ends too early")));
                     }
                     if input_offset == 0 {
                         // Nothing was used and nothing came out: no progress. (With the source at
@@ -299,6 +327,7 @@ mod tests {
             state: None,
             finished: false,
             failure: None,
+            input_error: None,
         };
         let mut buf = [0u8; 64];
         let first = r.read(&mut buf);
@@ -320,6 +349,7 @@ mod tests {
             state: None,
             finished: false,
             failure: None,
+            input_error: None,
         };
         let mut buf = [0u8; 64];
         let kind = loop {
@@ -343,6 +373,7 @@ mod tests {
             state: None,
             finished: false,
             failure: None,
+            input_error: None,
         };
         assert_eq!(r.read(&mut [0u8; 8]).unwrap_err().kind(), ErrorKind::MemoryLimit);
         assert!(r.state.is_none());

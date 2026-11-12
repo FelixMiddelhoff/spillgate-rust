@@ -272,6 +272,8 @@ pub(crate) struct Inflater {
     previous_length: u8,
     /// An error to return on the next call, after the bytes written before it were delivered.
     deferred: Option<Error>,
+    /// A failure of the input, held back while bits already taken from it are still decoded.
+    input_error: Option<Error>,
 
     code_length_table: Table,
     literal_table: Table,
@@ -327,6 +329,7 @@ impl Inflater {
             repeat_symbol: 0,
             previous_length: 0,
             deferred: None,
+            input_error: None,
             code_length_table: Table::new(CL_ROOT_BITS),
             literal_table: Table::new(LIT_ROOT_BITS),
             distance_table: Table::new(DIST_ROOT_BITS),
@@ -349,6 +352,7 @@ impl Inflater {
         self.window_filled = 0;
         self.stored_left = 0;
         self.deferred = None;
+        self.input_error = None;
     }
 
     /// True once the final block has ended.
@@ -388,7 +392,20 @@ impl Inflater {
                 }
                 _ => {}
             }
-            let buf = input.fill_buf().map_err(Error::from_input)?;
+            // A failing input is not reported while the bits already taken from it can still be
+            // decoded: otherwise the bytes delivered before the error would depend on how many
+            // were requested per read (SG-R-RDR-01).
+            let buf: &[u8] = if self.input_error.is_some() {
+                &[]
+            } else {
+                match input.fill_buf() {
+                    Ok(buf) => buf,
+                    Err(e) => {
+                        self.input_error = Some(Error::from_input(e));
+                        &[]
+                    }
+                }
+            };
             let at_end = buf.is_empty();
             let mut ip = 0usize;
             let mut op = 0usize;
@@ -417,7 +434,10 @@ impl Inflater {
                 Status::NeedInput => {
                     if at_end {
                         self.state = State::Failed;
-                        return Err(corrupt("the stream ends too early"));
+                        return Err(self
+                            .input_error
+                            .take()
+                            .unwrap_or_else(|| corrupt("the stream ends too early")));
                     }
                     if ip == 0 {
                         self.state = State::Failed;

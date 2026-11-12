@@ -426,3 +426,87 @@ fn decoding_is_deterministic_across_read_sizes_and_chunks_for_damaged_streams() 
         }
     }
 }
+
+// -- CPU: many tiny meta-blocks that each declare 256 + 256 Huffman trees ----------------------------
+
+mod hostile_trees {
+    use spillgate_test_support::BitWriter;
+
+    fn var_len_255(w: &mut BitWriter) {
+        w.bits(1, 1);
+        w.bits(7, 3);
+        w.bits(127, 7);
+    }
+
+    /// A simple prefix code with one symbol.
+    fn simple1(w: &mut BitWriter, alphabet: u32, symbol: u64) {
+        let bits = 32 - (alphabet - 1).leading_zeros();
+        w.bits(1, 2);
+        w.bits(0, 2);
+        w.bits(symbol, bits);
+    }
+
+    /// A compressed meta-block of about 700 bytes: MLEN = 1, 256 literal and 256 distance trees.
+    fn meta_block(w: &mut BitWriter) {
+        w.bits(0, 1); // ISLAST = 0
+        w.bits(0, 2); // MNIBBLES = 4
+        w.bits(0, 16); // MLEN - 1 = 0
+        w.bits(0, 1); // not uncompressed
+        w.bits(0, 3); // one block type of each kind
+        w.bits(0, 2); // NPOSTFIX
+        w.bits(0, 4); // NDIRECT
+        w.bits(0, 2); // context mode
+        var_len_255(w); // NTREESL = 256
+        w.bits(0, 1); // no RLE in the context map
+        simple1(w, 256, 0);
+        w.bits(0, 1); // no inverse move-to-front
+        var_len_255(w); // NTREESD = 256
+        w.bits(0, 1);
+        simple1(w, 256, 0);
+        w.bits(0, 1);
+        for _ in 0..256 {
+            simple1(w, 256, 65); // the literal trees
+        }
+        simple1(w, 704, 8); // the insert-and-copy tree
+        for _ in 0..256 {
+            simple1(w, 64, 0); // the distance trees
+        }
+    }
+
+    /// A stream of `n` such meta-blocks (one output byte each) and an empty last block.
+    pub fn stream(n: usize) -> Vec<u8> {
+        let mut w = BitWriter::new();
+        w.bits(0, 1); // window 16
+        for _ in 0..n {
+            meta_block(&mut w);
+        }
+        w.bits(3, 2); // ISLAST, ISLASTEMPTY
+        w.finish()
+    }
+}
+
+#[test]
+fn many_tiny_meta_blocks_with_256_trees_each_cost_bounded_cpu() {
+    // Covers: SG-R-MEM-03 SG-R-CDC-01
+    // Measured 2026-11-12, brotli-decompressor 5.0.0, 4000 meta-blocks (2.86 MB in, 4000 bytes out):
+    // 2.96 s in release (1033 ns per input byte), 14.9 s in the optimized-dependency debug profile.
+    // That is about 0.74 ms of table work per 716-byte meta-block (the Java port had the same cost,
+    // 2.67 s, until its decoder was changed). The cost is linear in the input and the output is
+    // smaller than the input, so the ratio limit never fires; only MaxInput and the caller's own
+    // deadline bound it (docs/threat-model, CPU residual risk). The bound here is deliberately
+    // generous: it catches a decoder that turns quadratic, not today's constant.
+    const BLOCKS: usize = 1000;
+    let stream = hostile_trees::stream(BLOCKS);
+    let d = decoder(loose(), 24);
+    let start = std::time::Instant::now();
+    let o = run_with(&d, &stream, &["br"], 65_536, usize::MAX);
+    let best = start.elapsed();
+    assert_eq!((o.kind, o.bytes.len()), (None, BLOCKS));
+    eprintln!(
+        "brotli hostile meta-blocks: {BLOCKS} blocks, {} input bytes, best {:.3} s ({:.0} ns/input byte)",
+        stream.len(),
+        best.as_secs_f64(),
+        best.as_nanos() as f64 / stream.len() as f64
+    );
+    assert!(best.as_secs() < 90, "took {best:?}");
+}
