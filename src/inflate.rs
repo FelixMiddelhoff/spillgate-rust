@@ -1,4 +1,5 @@
 //! A resumable raw-DEFLATE decoder (RFC 1951) with exact input accounting.
+//! (ClusterFuzzLite test change: this line exists only on the test branch.)
 //!
 //! The decoder works like zlib's `inflate()`: the caller passes an input window and an output
 //! buffer of any size, it stops when either is exhausted and remembers where it was. Memory is a
