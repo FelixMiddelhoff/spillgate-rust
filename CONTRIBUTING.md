@@ -26,4 +26,5 @@ skipped. Without features, only the vectors for identity, gzip and deflate run. 
 - No `unsafe` (the crate forbids it, tests included; the counting allocator lives in `tools/alloc-check`). No `unwrap`, `expect`, `panic!` or unchecked indexing on input-derived data in `src/`; arithmetic on sizes from the stream is checked or saturating.
 - Public API changes update `docs/how-to.md`, README and CHANGELOG in the same change; the how-to snippets are compiled by `cargo test --all-features --doc` and `tests/howto_snippets.rs`.
 - MSRV is 1.85 for the default features. Do not raise it without a changelog entry.
+- The test suite needs Rust 1.88 or newer (the dev-dependency `sha2` 0.11 requires it). `cargo +1.85 build --locked --lib` still builds the library on the MSRV.
 - Code is read by people: short functions, a doc comment that explains why, rule IDs where a rule applies.
