@@ -9,12 +9,18 @@ updates:
     ignore:
       # Vendored with spillgate patches (src/vendored/brotli_decompressor); the dev-dependency is the unpatched reference. Updates are manual rebases.
       - dependency-name: "brotli-decompressor"
+      # The allocator crates are pinned exactly to what the vendored decoder needs; a new generation is part of a rebase of the vendored copy.
+      - dependency-name: "alloc-no-stdlib"
+      - dependency-name: "alloc-stdlib"
   - package-ecosystem: cargo
     directory: /fuzz
     schedule: { interval: weekly }
     ignore:
       # Vendored with spillgate patches (src/vendored/brotli_decompressor); the dev-dependency is the unpatched reference. Updates are manual rebases.
       - dependency-name: "brotli-decompressor"
+      # The allocator crates are pinned exactly to what the vendored decoder needs; a new generation is part of a rebase of the vendored copy.
+      - dependency-name: "alloc-no-stdlib"
+      - dependency-name: "alloc-stdlib"
   - package-ecosystem: cargo
     directory: /tools/alloc-check
     schedule: { interval: weekly }
