@@ -2,7 +2,7 @@
 
 Versions below 1.0 may still change the API.
 
-## Unreleased
+## 0.1.1 - 2026-11-13
 
 - Feature `br`: the vendored brotli decoder is rebased from `brotli-decompressor` 5.0.0 to 6.3.1 (tag `6.3.1`, commit 26c38e2). It is now **unpatched**: 6.x contains the two strictness fixes that were backported (upstream 8ed0d7d and 693a4a1), and its Huffman tree groups grow on demand, so the table-retention CPU patch is gone (4000 meta-blocks of 256 + 256 trees: 0.23 s on 6.3.1 with or without the patch, 0.28-0.49 s with the old patch on 5.0.0, 2.5-3.0 s on unpatched 5.0.0). Output of every valid stream is bit-identical to 5.0.0 and to 6.3.1; verdicts on damaged streams equal 6.3.1 (differential tests against 6.3.1 and 5.0.0, and 36 055 external streams against a separate 6.3.1 build: no accept/reject difference except the trailing-data rule spillgate applies itself).
 - Feature `br`: the exact pins of the allocator crates move with it: `alloc-no-stdlib =3.0.0` (was `=2.0.4`) and `alloc-stdlib =0.3.0` (was `=0.2.4`). MSRV stays 1.85. Memory of the hostile table-hog stream (256 block types, 256 trees of each kind) drops from about 3.3 MiB to about 1.2 MiB.
