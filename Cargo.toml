@@ -32,7 +32,7 @@ sha2 = "0.10"
 serde_json = "1"
 zstd = "0.14"
 # Reference brotli encoder (and reference decoder for differential tests); tests only.
-brotli = { version = "8", default-features = false, features = ["std"] }
+brotli = { version = "9", default-features = false, features = ["std"] }
 # The unpatched upstream decoder the vendored copy is compared with (src/vendored/brotli_decompressor).
 upstream-brotli-decompressor = { package = "brotli-decompressor", version = "=5.0.0", default-features = false, features = ["std"] }
 
