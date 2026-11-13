@@ -314,10 +314,11 @@ checksum = "3a219298ac11a56ea9a6d2120044824d6f01aeb034955e7af7bc16858527deea"
 name = "spillgate"
 version = "0.1.0"
 dependencies = [
- "alloc-no-stdlib 2.0.4",
- "alloc-stdlib 0.2.4",
+ "alloc-no-stdlib 3.0.0",
+ "alloc-stdlib 0.3.0",
  "brotli",
  "brotli-decompressor 5.0.0",
+ "brotli-decompressor 6.3.1",
  "flate2",
  "serde_json",
  "sha2",

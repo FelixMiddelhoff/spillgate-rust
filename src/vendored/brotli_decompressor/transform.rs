@@ -717,7 +717,31 @@ pub const kTransforms: [Transform; kNumTransforms as usize] = [Transform {
 
 
 
-fn ToUpperCase(p: &mut [u8]) -> i32 {
+// Copies src to dst, which are equally long. Dictionary words are mostly 4 to
+// 16 bytes, too short for a memcpy call to pay off: two overlapping copies of
+// their first and last 4 or 8 bytes cover them. Other lengths are rare.
+#[inline(always)]
+pub(crate) fn copy_bytes(dst: &mut [u8], src: &[u8]) {
+  let n = src.len();
+  let dst = &mut dst[..n];
+  match n {
+    4..=7 => {
+      dst[..4].copy_from_slice(&src[..4]);
+      dst[n - 4..].copy_from_slice(&src[n - 4..]);
+    }
+    8..=16 => {
+      dst[..8].copy_from_slice(&src[..8]);
+      dst[n - 8..].copy_from_slice(&src[n - 8..]);
+    }
+    17..=32 => {
+      dst[..16].copy_from_slice(&src[..16]);
+      dst[n - 16..].copy_from_slice(&src[n - 16..]);
+    }
+    _ => dst.copy_from_slice(src),
+  }
+}
+
+pub(crate) fn ToUpperCase(p: &mut [u8]) -> i32 {
   if (fast!((p)[0]) < 0xc0) {
     if (fast!((p)[0]) >= b'a' && fast!((p)[0]) <= b'z') {
       fast_mut!((p)[0]) ^= 32;
@@ -755,7 +779,6 @@ pub fn TransformDictionaryWord(dst: &mut [u8],
     } else {
       t as i32 - (kOmitFirst1 - 1) as i32
     };
-    let mut i: i32 = 0;
     if (skip > len) {
       skip = len;
     }
@@ -764,10 +787,10 @@ pub fn TransformDictionaryWord(dst: &mut [u8],
     if (t <= kOmitLast9) {
       len -= t as i32;
     }
-    while (i < len) {
-      fast_mut!((dst)[idx as usize]) = fast!((word)[i as usize]);
-      idx += 1;
-      i += 1;
+    if len > 0 {
+      let start = idx as usize;
+      copy_bytes(fast_mut!((dst)[start ; start + len as usize]), fast!((word)[0 ; len as usize]));
+      idx += len;
     }
     let uppercase = &mut fast_mut!((dst)[(idx - len) as usize ;]);
     if (t == kUppercaseFirst) {

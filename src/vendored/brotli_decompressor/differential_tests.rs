@@ -1,7 +1,12 @@
-//! The vendored decoder against the unpatched upstream crate (`brotli-decompressor` 5.0.0, a
+//! The vendored decoder against the unpatched upstream crate (`brotli-decompressor` 6.3.1, a
 //! dev-dependency): on valid streams, on damaged ones and on the hostile meta-block streams the
 //! patch is about, both must give the same verdict, the same output and use the same input, for
-//! every way of feeding the input and draining the output.
+//! every way of feeding the input and draining the output. No difference is allowed.
+//!
+//! Second reference: the previous vendored version, `brotli-decompressor` 5.0.0 (unpatched). On valid
+//! streams the vendored decoder must give the same output as 5.0.0 (no regression); on damaged and
+//! random input 5.0.0 may differ (it lacks two upstream fixes), only the output of streams both accept
+//! must be equal.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
 use std::io::Write;
@@ -95,7 +100,21 @@ fn upstream(data: &[u8], in_chunk: usize, out_cap: usize) -> Trace {
     drive!(state, data, in_chunk, out_cap, up::BrotliDecompressStream)
 }
 
-fn same(data: &[u8], what: &str) -> Trace {
+fn upstream5(data: &[u8], in_chunk: usize, out_cap: usize) -> Trace {
+    use upstream_brotli_decompressor_5 as up;
+    let mut state = up::BrotliState::new_strict(
+        up::StandardAlloc::default(),
+        up::StandardAlloc::default(),
+        up::StandardAlloc::default(),
+    );
+    drive!(state, data, in_chunk, out_cap, up::BrotliDecompressStream)
+}
+
+/// Streams on which the vendored decoder and 5.0.0 disagreed on the verdict (diagnostic only).
+static DIFF_VS_5: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// `valid`: the stream is valid, so 5.0.0 must agree completely.
+fn same(data: &[u8], what: &str, valid: bool) -> Trace {
     let mut first = None;
     for (in_chunk, out_cap) in [
         (usize::MAX / 2, 1 << 16),
@@ -106,25 +125,21 @@ fn same(data: &[u8], what: &str) -> Trace {
     ] {
         // a tiny output buffer on a large output is slow: use it for small streams only
         let out_cap = if out_cap < 16 && data.len() > 3000 { 4096 } else { out_cap };
-        let (a, code) = vendored_code(data, in_chunk, out_cap);
+        let a = vendored(data, in_chunk, out_cap);
         let b = upstream(data, in_chunk, out_cap);
-        if a != b {
-            // The ONLY allowed difference (backports of upstream 8ed0d7d and 693a4a1): unpatched 5.0.0
-            // accepted the stream (or failed later for another reason), the vendored decoder rejects it because of nonzero padding after the
-            // last meta-block (-15) or because a meta-block overshoots its MLEN (-10 / -9).
-            let ctx = format!("{what}: input chunk {in_chunk}, output buffer {out_cap}");
-            // (upstream may also fail, but later and for another reason, when the overshoot was not the
-            // first thing it noticed; it is never a difference in the other direction.)
-            assert_ne!(b.verdict, "needs-input", "{ctx}: upstream needs input where vendored fails");
-            assert_eq!(a.verdict, "failure", "{ctx}: vendored must reject it");
-            assert!([-15, -10, -9].contains(&code), "{ctx}: unexpected error code {code}");
-            assert!(b.output.starts_with(&a.output), "{ctx}: vendored output is not a prefix");
-            assert!(a.consumed <= b.consumed, "{ctx}: vendored consumed more input");
-            continue;
+        let ctx = format!("{what}: input chunk {in_chunk}, output buffer {out_cap}");
+        assert_eq!(a, b, "{ctx}: vendored differs from unpatched 6.3.1");
+        let c = upstream5(data, in_chunk, out_cap);
+        if valid {
+            assert_eq!(a, c, "{ctx}: vendored differs from 5.0.0 on a valid stream");
+        } else if a != c {
+            DIFF_VS_5.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if a.verdict == "success" && c.verdict == "success" {
+                assert_eq!(a.output, c.output, "{ctx}: accepted by both, output differs");
+            }
         }
         first.get_or_insert(a);
     }
-    // None: every shape of feeding was one of the allowed rejections.
     first.unwrap_or(Trace { verdict: "failure", output: Vec::new(), consumed: 0 })
 }
 
@@ -234,7 +249,7 @@ fn valid_streams_decode_identically() {
             for quality in [0u32, 1, 5, 9, 11] {
                 for lgwin in [10u32, 16, 22, 24] {
                     let stream = encode(&data, quality, lgwin);
-                    let t = same(&stream, &format!("kind {kind} size {size} q{quality} w{lgwin}"));
+                    let t = same(&stream, &format!("kind {kind} size {size} q{quality} w{lgwin}"), true);
                     assert_eq!(t.verdict, "success");
                     assert_eq!(t.output, data);
                     streams += 1;
@@ -257,6 +272,7 @@ fn a_multi_megabyte_stream_with_many_meta_blocks_decodes_identically() {
         let b = upstream(&stream, usize::MAX / 2, 1 << 16);
         assert_eq!(a, b, "quality {quality}");
         assert_eq!(a.output, data);
+        assert_eq!(a, upstream5(&stream, usize::MAX / 2, 1 << 16), "quality {quality}: vs 5.0.0");
         let a = vendored(&stream, 1000, 70_000);
         assert_eq!(a.output, data);
     }
@@ -283,7 +299,7 @@ fn hostile_meta_block_streams_decode_identically() {
     }
     for shapes in &shapes_list {
         let stream = hostile_stream(shapes);
-        let t = same(&stream, &format!("{shapes:?}"));
+        let t = same(&stream, &format!("{shapes:?}"), true);
         assert_eq!(t.verdict, "success", "{shapes:?}");
         assert_eq!(t.output.len(), shapes.len());
     }
@@ -324,11 +340,14 @@ fn damaged_streams_get_the_same_verdict_and_output() {
                     data.insert(at, rng.next() as u8);
                 }
             }
-            let t = same(&data, &format!("base {b} round {round}"));
+            let t = same(&data, &format!("base {b} round {round}"), false);
             *verdicts.entry(t.verdict).or_insert(0usize) += 1;
         }
     }
-    eprintln!("damaged streams: {verdicts:?}");
+    eprintln!(
+        "damaged streams: {verdicts:?}; runs where 5.0.0 differs: {}",
+        DIFF_VS_5.load(std::sync::atomic::Ordering::Relaxed)
+    );
     assert!(verdicts.get("failure").copied().unwrap_or(0) > 100);
 }
 
@@ -338,6 +357,6 @@ fn random_bytes_get_the_same_verdict() {
     for round in 0..600 {
         let n = 1 + rng.below(300) as usize;
         let data: Vec<u8> = (0..n).map(|_| rng.next() as u8).collect();
-        same(&data, &format!("random {round}"));
+        same(&data, &format!("random {round}"), false);
     }
 }

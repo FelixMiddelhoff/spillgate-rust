@@ -1,4 +1,4 @@
-//! Vendored `brotli-decompressor` 5.0.0 (see VENDORED.md in this directory for the upstream
+//! Vendored `brotli-decompressor` 6.3.1 (see VENDORED.md in this directory for the upstream
 //! version, the license and the list of local changes). Third-party code: lints are relaxed here
 //! and nowhere else; the crate-wide `forbid(unsafe_code)` still applies.
 #![allow(
@@ -29,6 +29,7 @@ mod state;
 mod prefix;
 mod context;
 mod transform;
+mod shared_dictionary;
 mod decode;
 
 pub use huffman::HuffmanCode;

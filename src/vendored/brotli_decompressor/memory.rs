@@ -55,7 +55,6 @@ macro_rules! fast_mut {
 }
 
 
-
 // #[cfg(feature="unsafe")]
 // macro_rules! fast_slice {
 // (($slice : expr)[$index: expr]) => {
@@ -95,7 +94,6 @@ macro_rules! fast_slice_mut {
        fast_mut!(($slice.slice_mut())[$start;$end])
    };
 }
-
 
 // pub fn indexk<T>(item : &[T], index : usize) -> &T {
 //   return &item[index];
