@@ -16,6 +16,17 @@ RUSTDOCFLAGS="-D warnings" cargo doc --all-features --no-deps
 skipped. Without features, only the vectors for identity, gzip and deflate run. Fuzz targets are in
 `fuzz/` (`cargo +nightly fuzz run <target>`, needs `cargo install cargo-fuzz`).
 
+### ClusterFuzzLite on pull requests
+
+`.github/workflows/cflite-pr.yml` fuzzes the code a pull request changes with
+[ClusterFuzzLite](https://google.github.io/clusterfuzzlite/): all five targets of `fuzz/`
+(gzip, deflate, br, zstd, chain), address sanitizer, a budget of 300 seconds in total
+(`fuzz-seconds`, shared by the targets that the change reaches). The build is in `.clusterfuzzlite/`
+(it builds every `[[bin]]` of `fuzz/Cargo.toml`, so a new target needs no edit there). A finding
+fails the job; the log shows the stack trace and the crash input. Reproduce it locally with
+`cargo +nightly fuzz run <target> <file>`. It is advisory, not a required check, and keeps no
+corpus. The nightly 5 x 300 s run (`nightly-fuzz.yml`) stays the main fuzzing.
+
 ## Rules
 
 - The specification comes first. Behavior that the spec does not describe is not added here: change `spec/SPEC.md` in the reference repository, add vectors there, then sync.

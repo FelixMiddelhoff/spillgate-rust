@@ -1,0 +1,34 @@
+name: cflite-pr
+
+# ClusterFuzzLite: fuzz the code a pull request changes, briefly, with the address sanitizer. A
+# finding fails this job; it is not a required check. The fuzz targets and build are in
+# .clusterfuzzlite/. Findings are read from the job log (crash input and stack trace).
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cflite-pr-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # google/clusterfuzzlite has only the moving tag v1; the SHA is its commit.
+      - name: build fuzzers
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: rust
+          sanitizer: address
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: run fuzzers (code change)
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          mode: code-change
+          sanitizer: address
+          fuzz-seconds: 300
+          github-token: ${{ secrets.GITHUB_TOKEN }}
