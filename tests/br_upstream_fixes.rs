@@ -1,10 +1,11 @@
-//! Robustness fixes that upstream `brotli-decompressor` made after 5.0.0 (the version vendored in
-//! `src/vendored/brotli_decompressor`), probed through the public API with hand-built hostile streams.
+//! Robustness fixes that upstream `brotli-decompressor` made after 5.0.0, probed through the public API
+//! with hand-built hostile streams. They were written against 5.0.0 (the vendored version until the
+//! rebase); the vendored copy is now 6.3.1, which contains the fixes, and the tests are the regression
+//! guard that it keeps them.
 //!
-//! One test per upstream fix: is the bug in the vendored 5.0.0 source, and can attacker-controlled brotli
-//! input reach it through `Decoder`? A passing test documents that the input ends in a typed error (or the
-//! right bytes) and never in a panic (`internal`), a hang or a wrong accept. The commits examined are named
-//! in each test. Step 1 of the 6.3.1 review only probes; it changes no vendored code.
+//! One test per upstream fix: can attacker-controlled brotli input reach the bug through `Decoder`? A
+//! passing test documents that the input ends in a typed error (or the right bytes) and never in a panic
+//! (`internal`), a hang or a wrong accept. The commits examined are named in each test.
 //!
 //! Set `SPILLGATE_BR_DUMP=<dir>` to write every probed stream (`<name>.br`) and spillgate's verdict
 //! (`manifest.txt`: `name OK len fnv` or `name ERR`) for a differential run against another decoder;

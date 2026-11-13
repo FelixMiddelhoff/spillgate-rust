@@ -48,7 +48,29 @@ vendored files but not reachable from the spillgate API.
 
 ## Behavior patches
 
-None in this state (a plain 6.3.1; see the section below once a patch is applied).
+**None.** The vendored code behaves exactly like the unpatched crate (the differential test requires
+identical verdict, output and input consumption on every stream, no exception).
+
+The 5.0.0 copy carried two patches; both are obsolete:
+
+- Two strictness backports (upstream `8ed0d7d`: nonzero padding after the last meta-block is
+  `BROTLI_DECODER_ERROR_FORMAT_PADDING_2`; upstream `693a4a1`: a meta-block that overshoots its MLEN is
+  `BROTLI_DECODER_ERROR_FORMAT_BLOCK_LENGTH_2`). Both are in 6.x as they are. Regression guard:
+  `tests/br_upstream_fixes.rs`.
+- CPU patch (keep the Huffman table memory between meta-blocks, F3, hostile meta-block CPU). On 5.0.0 a stream
+  of 4000 meta-blocks that each declare 256 literal and 256 distance trees (2.86 MB in, 4000 bytes out) cost
+  2.5-3.0 s (release), 0.28-0.49 s patched. 6.x rewrote `HuffmanTreeGroup::init` (grow on demand; about 0.8 MB
+  per such meta-block instead of 3.3 MB) and the unpatched 6.3.1 does the same stream in **0.23-0.24 s**
+  (Windows, release; 0.21-0.22 s Linux/WSL, about 80 ns per input byte), so the cost that motivated the patch
+  is gone and the test `many_tiny_meta_blocks_with_256_trees_each_cost_bounded_cpu` (bound 1.5 s) passes without
+  it. 6.3.1 still frees the three tree groups in `BrotliStateCleanupAfterMetablock` (`reset()`), but its `init`
+  is already written to keep buffers that are large enough, so the retention idea only needed `reset()` removed
+  from the cleanup (and called from `BrotliStateCleanup`): that was tried (same measurement, 0.23 s on Windows
+  and Linux, no gain: the remaining time is reading and building 512 trees per meta-block, work the stream asks
+  for) and dropped, because it would hold up to several MiB between meta-blocks and give nothing. The
+  work-in-progress patch (7 lines in `state.rs`) is not kept in the tree.
+
+If the CPU test ever fails after a future rebase, the retention change above is the first thing to try.
 
 ## Differential test
 

@@ -12,9 +12,9 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
-//! The decoder is `brotli-decompressor` 5.0.0 (pure Rust, no FFI, no `unsafe`), vendored into this
-//! crate (`src/vendored/brotli_decompressor`, see `VENDORED.md` there for the upstream version, the
-//! license and the changes). What this module adds is what a hostile stream needs around it:
+//! The decoder is `brotli-decompressor` 6.3.1 (pure Rust, no FFI, no `unsafe`), vendored into this
+//! crate unpatched (`src/vendored/brotli_decompressor`, see `VENDORED.md` there for the upstream version, the
+//! license and the mechanical changes). What this module adds is what a hostile stream needs around it:
 //!
 //! - The window is read from the first byte of the stream and checked against the cap before the
 //!   decoder allocates anything (SG-R-CDC-04). The default cap is 24 bits (16 MiB - 16 bytes). The
@@ -23,8 +23,9 @@
 //!   what the meter counts.
 //! - A stream that ends early is `corrupt`, and so are bytes after the last meta-block.
 //! - Memory per stream is the window plus the decoder's tables: about 0.1 MiB for an ordinary stream and
-//!   up to about 3.3 MiB for a hostile one that asks for 256 block types and 256 trees of every kind
-//!   (measured in `tools/alloc-check/tests/br_memory.rs`), whatever the window cap.
+//!   about 1.2 MiB for a hostile one that asks for 256 block types and 256 trees of every kind
+//!   (measured in `tools/alloc-check/tests/br_memory.rs`, bound 4 MiB; the tree tables grow on demand),
+//!   whatever the window cap.
 
 use std::io::BufRead;
 

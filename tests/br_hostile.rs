@@ -491,12 +491,14 @@ fn many_tiny_meta_blocks_with_256_trees_each_cost_bounded_cpu() {
     // 4000 meta-blocks of 716 bytes each (2.86 MB in, 4000 bytes out), each declaring 256 literal and
     // 256 distance trees. The ratio limit never fires on this (the output is smaller than the input),
     // so the decoder's own cost per input byte is the only protection besides MaxInput and a deadline.
-    // Measured 2026-11-12, release: unpatched brotli-decompressor 5.0.0 2.5-3.0 s (about 900-1030 ns
-    // per input byte, 0.74 ms of table allocation and zeroing per meta-block), vendored and patched
-    // decoder (tables kept between meta-blocks, src/vendored/brotli_decompressor/VENDORED.md) 0.28 s
-    // (about 100 ns per input byte). The dev profile gives the same (0.34 s; the package is optimized in
-    // dev). The bound is 1.5 s on the best of three runs: 5 times the measured time as margin for slow or
-    // loaded CI machines, and below the old decoder's time even on this machine.
+    // Measured, release: unpatched brotli-decompressor 5.0.0 2.5-3.0 s (about 900-1030 ns per input
+    // byte, 0.74 ms of table allocation and zeroing per meta-block); 5.0.0 with spillgate's table-retention
+    // patch 0.28-0.49 s (2026-11-12 / 2026-11-13, the machine's load differs); vendored unpatched 6.3.1
+    // (the current vendored decoder, whose tree tables grow on demand: about 0.8 MB per such meta-block
+    // instead of 3.3 MB) 0.23-0.24 s on Windows and 0.21-0.22 s on Linux (about 80 ns per input byte).
+    // Keeping the tables between meta-blocks on top of 6.3.1 measured the same (0.23 s), so there is no
+    // patch (src/vendored/brotli_decompressor/VENDORED.md). The bound is 1.5 s on the best of three runs:
+    // 6 times the measured time as margin for slow or loaded CI machines, and below 5.0.0's time.
     const BLOCKS: usize = 4000;
     let stream = hostile_trees::stream(BLOCKS);
     let d = decoder(loose(), 24);
